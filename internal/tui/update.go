@@ -158,6 +158,15 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Enter goto mode
 		m.mode = ModeGoto
 		m.input = ""
+		
+	case tea.KeyCtrlP:
+		// Toggle preview mode
+		m.previewMode = !m.previewMode
+		if m.previewMode {
+			m.showMessage("Preview mode enabled")
+		} else {
+			m.showMessage("Preview mode disabled")
+		}
 
 	case tea.KeyHome:
 		m.editor.GetCursor().MoveToLineStart()
@@ -176,6 +185,12 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEnter:
 		m.editor.InsertText("\n")
+
+	case tea.KeySpace:
+		m.editor.InsertText(" ")
+
+	case tea.KeyTab:
+		m.editor.InsertText("\t")
 
 	case tea.KeyRunes:
 		m.editor.InsertText(msg.String())
@@ -213,6 +228,11 @@ func (m *Model) handleModalKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.input) > 0 {
 			m.input = m.input[:len(m.input)-1]
 		}
+		return m, nil
+		
+	case tea.KeySpace:
+		// Add space to input
+		m.input += " "
 		return m, nil
 		
 	case tea.KeyRunes:
