@@ -37,6 +37,21 @@ const (
 	TokenNumber
 )
 
+// Start returns the start position of the token
+func (t Token) Start() int {
+	return t.start
+}
+
+// End returns the end position of the token
+func (t Token) End() int {
+	return t.end
+}
+
+// Kind returns the kind of the token
+func (t Token) Kind() TokenKind {
+	return t.kind
+}
+
 // Position represents a cursor position in the document
 type Position struct {
 	Line int
