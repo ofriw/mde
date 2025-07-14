@@ -3,6 +3,7 @@ package plugins
 import (
 	"fmt"
 	"github.com/ofri/mde/internal/config"
+	"github.com/ofri/mde/internal/plugins/parsers"
 	"github.com/ofri/mde/internal/plugins/renderers"
 	"github.com/ofri/mde/internal/plugins/themes"
 	"github.com/ofri/mde/pkg/plugin"
@@ -73,8 +74,20 @@ func initializeRenderers(cfg *config.Config) error {
 
 // initializeParsers registers all built-in parsers
 func initializeParsers(cfg *config.Config) error {
-	// TODO: Implement when we have parser plugins
-	// For now, this is a placeholder
+	registry := plugin.GetRegistry()
+	
+	// Register CommonMark parser
+	commonMarkParser := parsers.NewCommonMarkParser()
+	if err := registry.RegisterParser(commonMarkParser.Name(), commonMarkParser); err != nil {
+		return fmt.Errorf("failed to register CommonMark parser: %w", err)
+	}
+	
+	// Configure parser with user settings
+	parserConfig := cfg.GetPluginConfig("parser", commonMarkParser.Name())
+	if err := commonMarkParser.Configure(parserConfig); err != nil {
+		return fmt.Errorf("failed to configure CommonMark parser: %w", err)
+	}
+	
 	return nil
 }
 
@@ -96,12 +109,11 @@ func setDefaultPlugins(cfg *config.Config) error {
 		}
 	}
 	
-	// Set default parser (when we have them)
+	// Set default parser
 	if cfg.Plugins.DefaultParser != "" {
-		// TODO: Implement when we have parser plugins
-		// if err := registry.SetDefaultParser(cfg.Plugins.DefaultParser); err != nil {
-		// 	return fmt.Errorf("failed to set default parser '%s': %w", cfg.Plugins.DefaultParser, err)
-		// }
+		if err := registry.SetDefaultParser(cfg.Plugins.DefaultParser); err != nil {
+			return fmt.Errorf("failed to set default parser '%s': %w", cfg.Plugins.DefaultParser, err)
+		}
 	}
 	
 	return nil

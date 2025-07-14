@@ -151,6 +151,11 @@ func (t *DarkTheme) initializeStyles() {
 	}
 	
 	// Markdown elements
+	t.styles[theme.MarkdownHeading] = theme.Style{
+		Foreground: t.colorScheme.Accent,
+		Bold:       true,
+	}
+	
 	t.styles[theme.MarkdownHeading1] = theme.Style{
 		Foreground: t.colorScheme.Accent,
 		Bold:       true,
@@ -175,6 +180,42 @@ func (t *DarkTheme) initializeStyles() {
 	
 	t.styles[theme.MarkdownHeading6] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+	}
+	
+	t.styles[theme.MarkdownBold] = theme.Style{
+		Foreground: t.colorScheme.Foreground,
+		Bold:       true,
+	}
+	
+	t.styles[theme.MarkdownItalic] = theme.Style{
+		Foreground: t.colorScheme.Foreground,
+		Italic:     true,
+	}
+	
+	t.styles[theme.MarkdownCode] = theme.Style{
+		Foreground: t.colorScheme.Secondary,
+		Background: t.colorScheme.BackgroundAlt,
+	}
+	
+	t.styles[theme.MarkdownLink] = theme.Style{
+		Foreground: t.colorScheme.Primary,
+		Underline:  true,
+	}
+	
+	t.styles[theme.MarkdownLinkText] = theme.Style{
+		Foreground: t.colorScheme.Primary,
+	}
+	
+	t.styles[theme.MarkdownLinkURL] = theme.Style{
+		Foreground: t.colorScheme.ForegroundAlt,
+	}
+	
+	t.styles[theme.MarkdownImage] = theme.Style{
+		Foreground: t.colorScheme.Warning,
+	}
+	
+	t.styles[theme.MarkdownDelimiter] = theme.Style{
+		Foreground: t.colorScheme.ForegroundAlt,
 	}
 	
 	t.styles[theme.MarkdownQuote] = theme.Style{

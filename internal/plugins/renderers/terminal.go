@@ -106,6 +106,31 @@ func (r *TerminalRenderer) RenderLine(ctx context.Context, line string, tokens [
 			elementType = theme.SyntaxComment
 		case ast.TokenNumber:
 			elementType = theme.SyntaxNumber
+		// Markdown-specific tokens
+		case ast.TokenHeading:
+			elementType = theme.MarkdownHeading
+		case ast.TokenBold:
+			elementType = theme.MarkdownBold
+		case ast.TokenItalic:
+			elementType = theme.MarkdownItalic
+		case ast.TokenCode:
+			elementType = theme.MarkdownCode
+		case ast.TokenCodeBlock:
+			elementType = theme.MarkdownCodeBlock
+		case ast.TokenLink:
+			elementType = theme.MarkdownLink
+		case ast.TokenLinkText:
+			elementType = theme.MarkdownLinkText
+		case ast.TokenLinkURL:
+			elementType = theme.MarkdownLinkURL
+		case ast.TokenImage:
+			elementType = theme.MarkdownImage
+		case ast.TokenQuote:
+			elementType = theme.MarkdownQuote
+		case ast.TokenList:
+			elementType = theme.MarkdownList
+		case ast.TokenDelimiter:
+			elementType = theme.MarkdownDelimiter
 		default:
 			elementType = theme.TextNormal
 		}
