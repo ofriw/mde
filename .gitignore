@@ -28,5 +28,23 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# Binary output
+/mde
+
+# ChunkHound database files
+.chunkhound.db
+.chunkhound.db.wal
+.chunkhound.db.shm
+.chunkhound.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*~
+*.swp
+*.tmp
