@@ -385,3 +385,118 @@ func (e *Editor) GetCursorScreenPosition() (int, int) {
 	
 	return screenRow, screenCol
 }
+
+// FindText searches for text in the document starting from current cursor position
+func (e *Editor) FindText(searchText string, caseSensitive bool) *Position {
+	if searchText == "" {
+		return nil
+	}
+	
+	pos := e.cursor.GetPosition()
+	text := e.document.GetText()
+	
+	if !caseSensitive {
+		searchText = strings.ToLower(searchText)
+		text = strings.ToLower(text)
+	}
+	
+	// Convert position to text offset
+	lines := strings.Split(text, "\n")
+	offset := 0
+	for i := 0; i < pos.Line && i < len(lines); i++ {
+		offset += len(lines[i]) + 1 // +1 for newline
+	}
+	offset += pos.Col
+	
+	// Search from current position
+	index := strings.Index(text[offset:], searchText)
+	if index == -1 {
+		// Wrap around search
+		index = strings.Index(text, searchText)
+		if index == -1 {
+			return nil
+		}
+	} else {
+		index += offset
+	}
+	
+	// Convert back to position
+	return e.offsetToPosition(index)
+}
+
+// ReplaceText replaces text at the current cursor position
+func (e *Editor) ReplaceText(oldText, newText string, caseSensitive bool) bool {
+	if oldText == "" {
+		return false
+	}
+	
+	pos := e.cursor.GetPosition()
+	text := e.document.GetText()
+	
+	searchText := oldText
+	if !caseSensitive {
+		searchText = strings.ToLower(oldText)
+		text = strings.ToLower(text)
+	}
+	
+	// Convert position to text offset
+	lines := strings.Split(text, "\n")
+	offset := 0
+	for i := 0; i < pos.Line && i < len(lines); i++ {
+		offset += len(lines[i]) + 1 // +1 for newline
+	}
+	offset += pos.Col
+	
+	// Check if text at cursor matches
+	if offset+len(searchText) <= len(text) && text[offset:offset+len(searchText)] == searchText {
+		// Delete old text
+		for i := 0; i < len(oldText); i++ {
+			e.DeleteText(1)
+		}
+		// Insert new text
+		e.InsertText(newText)
+		return true
+	}
+	
+	return false
+}
+
+// GotoLine moves cursor to specified line
+func (e *Editor) GotoLine(lineNum int) {
+	if lineNum < 1 {
+		lineNum = 1
+	}
+	if lineNum > e.document.LineCount() {
+		lineNum = e.document.LineCount()
+	}
+	
+	newPos := Position{Line: lineNum - 1, Col: 0}
+	e.cursor.SetPosition(newPos)
+}
+
+// offsetToPosition converts text offset to Position
+func (e *Editor) offsetToPosition(offset int) *Position {
+	text := e.document.GetText()
+	lines := strings.Split(text, "\n")
+	
+	currentOffset := 0
+	for lineNum, line := range lines {
+		if currentOffset+len(line) >= offset {
+			return &Position{
+				Line: lineNum,
+				Col:  offset - currentOffset,
+			}
+		}
+		currentOffset += len(line) + 1 // +1 for newline
+	}
+	
+	// If we get here, offset is at end of document
+	return &Position{
+		Line: len(lines) - 1,
+		Col:  len(lines[len(lines)-1]),
+	}
+}
+// GetViewPort returns the current viewport
+func (e *Editor) GetViewPort() ViewPort {
+	return e.viewport
+}

@@ -19,7 +19,22 @@ type Model struct {
 	message      string
 	messageTimer int
 	err          error
+	
+	// Modal states
+	mode         EditorMode
+	input        string
+	replaceText  string
+	caseSensitive bool
 }
+
+type EditorMode int
+
+const (
+	ModeNormal EditorMode = iota
+	ModeFind
+	ModeReplace
+	ModeGoto
+)
 
 func New() *Model {
 	return &Model{
@@ -48,7 +63,11 @@ func (m *Model) View() string {
 	}
 
 	// Update editor viewport
-	m.editor.SetViewPort(m.width, m.height-2)
+	viewportHeight := m.height - 2
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	m.editor.SetViewPort(m.width, viewportHeight)
 	m.editor.AdjustViewPort()
 	
 	// Render with syntax highlighting
@@ -63,6 +82,9 @@ func (m *Model) View() string {
 // renderEditorContent renders the editor content with syntax highlighting
 func (m *Model) renderEditorContent() string {
 	editorHeight := m.height - 2
+	if editorHeight < 1 {
+		editorHeight = 1
+	}
 	
 	// Try to get renderer and theme plugins
 	registry := plugin.GetRegistry()
@@ -237,7 +259,17 @@ func (m *Model) renderStatusBar() string {
 }
 
 func (m *Model) renderHelpBar() string {
-	help := "^O Open  ^S Save  ^Q Quit  ^Z Undo  ^Y Redo  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers"
+	var help string
+	switch m.mode {
+	case ModeFind:
+		help = "Find: " + m.input + " | Enter: Search | Esc: Cancel"
+	case ModeReplace:
+		help = "Replace: " + m.input + " with: " + m.replaceText + " | Enter: Replace | Esc: Cancel"
+	case ModeGoto:
+		help = "Goto line: " + m.input + " | Enter: Go | Esc: Cancel"
+	default:
+		help = "^O Open  ^S Save  ^Q Quit  ^Z Undo  ^Y Redo  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto"
+	}
 	
 	helpBar := lipgloss.NewStyle().
 		Background(lipgloss.Color("237")).
