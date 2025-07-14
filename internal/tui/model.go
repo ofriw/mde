@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ofri/mde/pkg/ast"
+	"github.com/ofri/mde/pkg/plugin"
+	"github.com/ofri/mde/pkg/theme"
 )
 
 type Model struct {
@@ -28,7 +31,11 @@ func (m *Model) SetFilename(filename string) {
 	err := m.editor.LoadFile(filename)
 	if err != nil {
 		m.err = err
+		return
 	}
+	
+	// Parse the document for syntax highlighting
+	m.parseDocument()
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -44,14 +51,70 @@ func (m *Model) View() string {
 	m.editor.SetViewPort(m.width, m.height-2)
 	m.editor.AdjustViewPort()
 	
+	// Render with syntax highlighting
+	content := m.renderEditorContent()
+	
+	statusBar := m.renderStatusBar()
+	helpBar := m.renderHelpBar()
+	
+	return lipgloss.JoinVertical(lipgloss.Top, content, statusBar, helpBar)
+}
+
+// renderEditorContent renders the editor content with syntax highlighting
+func (m *Model) renderEditorContent() string {
+	editorHeight := m.height - 2
+	
+	// Try to get renderer and theme plugins
+	registry := plugin.GetRegistry()
+	renderer, err := registry.GetDefaultRenderer()
+	if err != nil {
+		// Fallback to simple rendering
+		return m.renderSimple(editorHeight)
+	}
+	
+	theme, err := registry.GetDefaultTheme()
+	if err != nil {
+		// Fallback to simple rendering
+		return m.renderSimple(editorHeight)
+	}
+	
+	// Render the document using plugins
+	ctx := context.Background()
+	renderedLines, err := renderer.Render(ctx, m.editor.GetDocument(), theme)
+	if err != nil {
+		// Fallback to simple rendering
+		return m.renderSimple(editorHeight)
+	}
+	
+	// Convert rendered lines to string and add cursor
+	content := m.renderLinesWithCursor(renderedLines, theme, renderer)
+	
+	// Pad to fill editor height
+	lines := strings.Split(content, "\n")
+	for len(lines) < editorHeight {
+		lines = append(lines, "")
+	}
+	
+	// Trim to exact height
+	if len(lines) > editorHeight {
+		lines = lines[:editorHeight]
+	}
+	
+	result := strings.Join(lines, "\n")
+	
+	return lipgloss.NewStyle().
+		Width(m.width).
+		Height(editorHeight).
+		Render(result)
+}
+
+// renderSimple provides fallback rendering without plugins
+func (m *Model) renderSimple(editorHeight int) string {
 	// Get visible lines
 	lines := m.editor.GetVisibleLines()
 	
-	// Add selection highlighting and cursor
+	// Add cursor
 	cursorRow, cursorCol := m.editor.GetCursorScreenPosition()
-	
-	// TODO: Add selection highlighting here
-	// For now, just show cursor
 	if cursorRow >= 0 && cursorRow < len(lines) && cursorCol >= 0 {
 		line := lines[cursorRow]
 		runes := []rune(line)
@@ -66,7 +129,7 @@ func (m *Model) View() string {
 		lines[cursorRow] = string(runes)
 	}
 	
-	// Join lines
+	// Join lines and pad
 	var b strings.Builder
 	for i, line := range lines {
 		b.WriteString(line)
@@ -76,20 +139,70 @@ func (m *Model) View() string {
 	}
 	
 	// Pad remaining lines
-	editorHeight := m.height - 2
 	for i := len(lines); i < editorHeight; i++ {
 		b.WriteString("\n")
 	}
 	
-	editor := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Width(m.width).
 		Height(editorHeight).
 		Render(b.String())
+}
+
+// parseDocument parses the current document content for syntax highlighting
+func (m *Model) parseDocument() {
+	registry := plugin.GetRegistry()
+	parser, err := registry.GetDefaultParser()
+	if err != nil {
+		// No parser available, skip parsing
+		return
+	}
 	
-	statusBar := m.renderStatusBar()
-	helpBar := m.renderHelpBar()
+	ctx := context.Background()
+	_, err = parser.Parse(ctx, m.editor.GetDocument().GetText())
+	if err != nil {
+		// Parsing failed, continue without syntax highlighting
+		return
+	}
 	
-	return lipgloss.JoinVertical(lipgloss.Top, editor, statusBar, helpBar)
+	// Apply syntax highlighting line by line
+	doc := m.editor.GetDocument()
+	for i := 0; i < doc.LineCount(); i++ {
+		line := doc.GetLine(i)
+		tokens, err := parser.GetSyntaxHighlighting(ctx, line)
+		if err != nil {
+			// Skip this line if parsing fails
+			continue
+		}
+		doc.SetLineTokens(i, tokens)
+	}
+}
+
+// renderLinesWithCursor converts rendered lines to display string with cursor
+func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, themePlugin theme.Theme, renderer plugin.RendererPlugin) string {
+	// Convert to plain text for now
+	lines := make([]string, len(renderedLines))
+	for i, line := range renderedLines {
+		lines[i] = line.Content
+	}
+	
+	// Add cursor
+	cursorRow, cursorCol := m.editor.GetCursorScreenPosition()
+	if cursorRow >= 0 && cursorRow < len(lines) && cursorCol >= 0 {
+		line := lines[cursorRow]
+		runes := []rune(line)
+		
+		if cursorCol < len(runes) {
+			runes[cursorCol] = '█'
+		} else {
+			runes = append(runes, []rune(strings.Repeat(" ", cursorCol-len(runes)))...)
+			runes = append(runes, '█')
+		}
+		
+		lines[cursorRow] = string(runes)
+	}
+	
+	return strings.Join(lines, "\n")
 }
 
 func (m *Model) renderStatusBar() string {

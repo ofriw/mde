@@ -89,8 +89,10 @@ func (e *Editor) LoadFile(filename string) error {
 	e.cursor = NewCursor(e.document)
 	e.history.Clear()
 	
+	
 	return nil
 }
+
 
 // SaveFile saves the document to a file
 func (e *Editor) SaveFile(filename string) error {
@@ -146,6 +148,7 @@ func (e *Editor) InsertText(text string) {
 	
 	// Add to history
 	e.history.AddChange(change, newPos)
+	
 }
 
 // DeleteText deletes text at the current cursor position
@@ -189,6 +192,7 @@ func (e *Editor) DeleteText(count int) {
 	
 	// Add to history
 	e.history.AddChange(change, deletePos)
+	
 }
 
 // Copy copies the selected text to clipboard
@@ -260,6 +264,7 @@ func (e *Editor) DeleteSelection() {
 	
 	// Add to history
 	e.history.AddChange(change, e.cursor.GetPosition())
+	
 }
 
 // Undo undoes the last change
@@ -281,6 +286,7 @@ func (e *Editor) Undo() {
 	
 	// Restore cursor position
 	e.cursor.SetPosition(entry.Cursor)
+	
 }
 
 // Redo redoes the next change
@@ -300,6 +306,7 @@ func (e *Editor) Redo() {
 	
 	// Restore cursor position
 	e.cursor.SetPosition(entry.Cursor)
+	
 }
 
 // CanUndo returns true if there are changes to undo
