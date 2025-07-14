@@ -39,18 +39,27 @@ const (
 	TextLink
 	
 	// Markdown elements
+	MarkdownHeading
 	MarkdownHeading1
 	MarkdownHeading2
 	MarkdownHeading3
 	MarkdownHeading4
 	MarkdownHeading5
 	MarkdownHeading6
-	MarkdownQuote
+	MarkdownBold
+	MarkdownItalic
+	MarkdownCode
 	MarkdownCodeBlock
+	MarkdownLink
+	MarkdownLinkText
+	MarkdownLinkURL
+	MarkdownImage
+	MarkdownQuote
 	MarkdownTable
 	MarkdownTableHeader
 	MarkdownList
 	MarkdownListItem
+	MarkdownDelimiter
 	
 	// Syntax highlighting
 	SyntaxKeyword

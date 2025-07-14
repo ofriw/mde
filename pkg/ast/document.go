@@ -26,6 +26,15 @@ type Token struct {
 	kind  TokenKind
 }
 
+// NewToken creates a new token
+func NewToken(start, end int, kind TokenKind) Token {
+	return Token{
+		start: start,
+		end:   end,
+		kind:  kind,
+	}
+}
+
 // TokenKind represents different types of tokens
 type TokenKind int
 
@@ -35,6 +44,20 @@ const (
 	TokenString
 	TokenComment
 	TokenNumber
+	// Markdown-specific tokens
+	TokenHeading
+	TokenBold
+	TokenItalic
+	TokenCode
+	TokenCodeBlock
+	TokenLink
+	TokenLinkText
+	TokenLinkURL
+	TokenImage
+	TokenQuote
+	TokenList
+	TokenTable
+	TokenDelimiter
 )
 
 // Start returns the start position of the token
@@ -291,6 +314,24 @@ func (d *Document) GetCharAt(pos Position) rune {
 	}
 	
 	return runes[pos.Col]
+}
+
+// SetLineTokens sets syntax highlighting tokens for a specific line
+func (d *Document) SetLineTokens(lineNum int, tokens []Token) {
+	if lineNum < 0 || lineNum >= len(d.lines) {
+		return
+	}
+	
+	d.lines[lineNum].tokens = tokens
+}
+
+// GetLineTokens returns syntax highlighting tokens for a specific line
+func (d *Document) GetLineTokens(lineNum int) []Token {
+	if lineNum < 0 || lineNum >= len(d.lines) {
+		return nil
+	}
+	
+	return d.lines[lineNum].tokens
 }
 
 // FindWordStart finds the start of the word at the given position
