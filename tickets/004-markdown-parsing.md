@@ -23,3 +23,20 @@ Integrate goldmark parser with syntax highlighting and preview mode.
 - Preview mode shows rendered markdown
 - Parsing is fast and accurate
 - CommonMark spec compliance
+
+# History
+
+## 2025-07-14
+Successfully implemented core markdown parsing and syntax highlighting:
+- ✅ Added goldmark dependency to project
+- ✅ Implemented CommonMarkParser plugin with full syntax highlighting support
+- ✅ Added markdown-specific token types (heading, bold, italic, code, links, etc.)
+- ✅ Extended theme system with markdown element styling
+- ✅ Integrated parser with terminal renderer for syntax highlighting
+- ✅ Connected parsing pipeline to TUI for real-time highlighting
+- ✅ Fixed architectural issues (import cycles) between plugin and AST systems
+- ✅ Added comprehensive regex-based markdown element detection
+- ✅ Implemented line-by-line token parsing for performance
+
+**Current Status**: Core markdown parsing and syntax highlighting functional. 
+**Remaining work**: Preview mode implementation and parsing optimizations.
