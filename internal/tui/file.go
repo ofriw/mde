@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/ofri/mde/pkg/ast"
 )
 
 type fileLoadedMsg struct {
@@ -54,22 +55,18 @@ func (m *Model) loadFile(filename string) tea.Cmd {
 }
 
 func (m *Model) saveFile() tea.Cmd {
-	if m.filename == "" {
+	filename := m.editor.GetDocument().GetFilename()
+	if filename == "" {
 		m.showMessage("No filename specified")
 		return nil
 	}
 
 	return func() tea.Msg {
-		content := strings.Join(m.content, "\n")
-		err := os.WriteFile(m.filename, []byte(content), 0644)
-		return fileSavedMsg{filename: m.filename, err: err}
+		err := m.editor.SaveFile(filename)
+		return fileSavedMsg{filename: filename, err: err}
 	}
 }
 
-func (m *Model) showMessage(msg string) {
-	m.message = msg
-	m.messageTimer = 60
-}
 
 func (m *Model) handleFileMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -78,11 +75,11 @@ func (m *Model) handleFileMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showMessage("Error loading file: " + msg.err.Error())
 			return m, nil
 		}
-		m.content = msg.content
-		m.filename = msg.filename
-		m.cursor = position{0, 0}
-		m.offset = 0
-		m.modified = false
+		// Load content into editor
+		content := strings.Join(msg.content, "\n")
+		m.editor = ast.NewEditorWithContent(content)
+		m.editor.GetDocument().SetFilename(msg.filename)
+		m.editor.GetDocument().ClearModified()
 		m.showMessage("Loaded " + msg.filename)
 		return m, nil
 
@@ -91,7 +88,6 @@ func (m *Model) handleFileMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showMessage("Error saving file: " + msg.err.Error())
 			return m, nil
 		}
-		m.modified = false
 		m.showMessage("Saved " + msg.filename)
 		return m, nil
 

@@ -6,41 +6,32 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/ofri/mde/pkg/ast"
 )
 
 type Model struct {
-	content      []string
-	cursor       position
-	filename     string
+	editor       *ast.Editor
 	width        int
 	height       int
-	offset       int
-	modified     bool
 	message      string
 	messageTimer int
 	err          error
 }
 
-type position struct {
-	row int
-	col int
-}
-
 func New() *Model {
 	return &Model{
-		content: []string{""},
-		cursor:  position{0, 0},
+		editor: ast.NewEditor(),
 	}
 }
 
 func (m *Model) SetFilename(filename string) {
-	m.filename = filename
+	err := m.editor.LoadFile(filename)
+	if err != nil {
+		m.err = err
+	}
 }
 
 func (m *Model) Init() tea.Cmd {
-	if m.filename != "" {
-		return m.loadFile(m.filename)
-	}
 	return nil
 }
 
@@ -49,31 +40,45 @@ func (m *Model) View() string {
 		return m.err.Error()
 	}
 
-	var b strings.Builder
+	// Update editor viewport
+	m.editor.SetViewPort(m.width, m.height-2)
+	m.editor.AdjustViewPort()
 	
-	editorHeight := m.height - 2
+	// Get visible lines
+	lines := m.editor.GetVisibleLines()
 	
-	for i := 0; i < editorHeight; i++ {
-		lineIdx := i + m.offset
-		if lineIdx < len(m.content) {
-			line := m.content[lineIdx]
-			
-			if lineIdx == m.cursor.row {
-				if m.cursor.col < len(line) {
-					line = line[:m.cursor.col] + "█" + line[m.cursor.col:]
-				} else if m.cursor.col == len(line) {
-					line = line + "█"
-				} else {
-					line = line + strings.Repeat(" ", m.cursor.col-len(line)) + "█"
-				}
-			}
-			
-			b.WriteString(line)
+	// Add selection highlighting and cursor
+	cursorRow, cursorCol := m.editor.GetCursorScreenPosition()
+	
+	// TODO: Add selection highlighting here
+	// For now, just show cursor
+	if cursorRow >= 0 && cursorRow < len(lines) && cursorCol >= 0 {
+		line := lines[cursorRow]
+		runes := []rune(line)
+		
+		if cursorCol < len(runes) {
+			runes[cursorCol] = '█'
+		} else {
+			runes = append(runes, []rune(strings.Repeat(" ", cursorCol-len(runes)))...)
+			runes = append(runes, '█')
 		}
 		
-		if i < editorHeight-1 {
+		lines[cursorRow] = string(runes)
+	}
+	
+	// Join lines
+	var b strings.Builder
+	for i, line := range lines {
+		b.WriteString(line)
+		if i < len(lines)-1 {
 			b.WriteString("\n")
 		}
+	}
+	
+	// Pad remaining lines
+	editorHeight := m.height - 2
+	for i := len(lines); i < editorHeight; i++ {
+		b.WriteString("\n")
 	}
 	
 	editor := lipgloss.NewStyle().
@@ -88,11 +93,11 @@ func (m *Model) View() string {
 }
 
 func (m *Model) renderStatusBar() string {
-	filename := m.filename
+	filename := m.editor.GetDocument().GetFilename()
 	if filename == "" {
 		filename = "[No Name]"
 	}
-	if m.modified {
+	if m.editor.GetDocument().IsModified() {
 		filename += " [Modified]"
 	}
 	
@@ -101,7 +106,8 @@ func (m *Model) renderStatusBar() string {
 		status = m.message
 	}
 	
-	position := fmt.Sprintf("Ln %d, Col %d", m.cursor.row+1, m.cursor.col+1)
+	pos := m.editor.GetCursor().GetPosition()
+	position := fmt.Sprintf("Ln %d, Col %d", pos.Line+1, pos.Col+1)
 	
 	gap := m.width - lipgloss.Width(status) - lipgloss.Width(position)
 	if gap < 1 {
@@ -118,7 +124,7 @@ func (m *Model) renderStatusBar() string {
 }
 
 func (m *Model) renderHelpBar() string {
-	help := "^O Open  ^S Save  ^Q Quit"
+	help := "^O Open  ^S Save  ^Q Quit  ^Z Undo  ^Y Redo  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers"
 	
 	helpBar := lipgloss.NewStyle().
 		Background(lipgloss.Color("237")).

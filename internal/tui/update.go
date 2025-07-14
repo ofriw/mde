@@ -16,7 +16,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.adjustViewport()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -31,7 +30,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
-	case tea.KeyCtrlC, tea.KeyCtrlQ:
+	case tea.KeyCtrlC:
+		if m.editor.GetCursor().HasSelection() {
+			m.editor.Copy()
+			m.showMessage("Copied")
+		} else {
+			return m, tea.Quit
+		}
+
+	case tea.KeyCtrlQ:
 		return m, tea.Quit
 
 	case tea.KeyCtrlS:
@@ -40,151 +47,114 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlO:
 		return m, m.openFile()
 
-	case tea.KeyUp:
-		m.moveCursorUp()
-
-	case tea.KeyDown:
-		m.moveCursorDown()
-
-	case tea.KeyLeft:
-		m.moveCursorLeft()
-
-	case tea.KeyRight:
-		m.moveCursorRight()
-
-	case tea.KeyHome:
-		m.cursor.col = 0
-
-	case tea.KeyEnd:
-		if m.cursor.row < len(m.content) {
-			m.cursor.col = len(m.content[m.cursor.row])
+	case tea.KeyCtrlZ:
+		if m.editor.CanUndo() {
+			m.editor.Undo()
+			m.showMessage("Undone")
 		}
 
+	case tea.KeyCtrlY:
+		if m.editor.CanRedo() {
+			m.editor.Redo()
+			m.showMessage("Redone")
+		}
+
+	case tea.KeyCtrlV:
+		m.editor.Paste()
+
+	case tea.KeyCtrlX:
+		if m.editor.GetCursor().HasSelection() {
+			m.editor.Cut()
+			m.showMessage("Cut")
+		}
+
+	case tea.KeyUp:
+		m.editor.GetCursor().MoveUp()
+
+	case tea.KeyDown:
+		m.editor.GetCursor().MoveDown()
+
+	case tea.KeyLeft:
+		m.editor.GetCursor().MoveLeft()
+
+	case tea.KeyRight:
+		m.editor.GetCursor().MoveRight()
+
+	case tea.KeyShiftUp:
+		if !m.editor.GetCursor().HasSelection() {
+			m.editor.GetCursor().StartSelection()
+		}
+		m.editor.GetCursor().MoveUp()
+		m.editor.GetCursor().ExtendSelection()
+
+	case tea.KeyShiftDown:
+		if !m.editor.GetCursor().HasSelection() {
+			m.editor.GetCursor().StartSelection()
+		}
+		m.editor.GetCursor().MoveDown()
+		m.editor.GetCursor().ExtendSelection()
+
+	case tea.KeyShiftLeft:
+		if !m.editor.GetCursor().HasSelection() {
+			m.editor.GetCursor().StartSelection()
+		}
+		m.editor.GetCursor().MoveLeft()
+		m.editor.GetCursor().ExtendSelection()
+
+	case tea.KeyShiftRight:
+		if !m.editor.GetCursor().HasSelection() {
+			m.editor.GetCursor().StartSelection()
+		}
+		m.editor.GetCursor().MoveRight()
+		m.editor.GetCursor().ExtendSelection()
+
+	case tea.KeyCtrlA:
+		// Select all
+		m.editor.GetCursor().StartSelection()
+		m.editor.GetCursor().MoveToDocumentStart()
+		m.editor.GetCursor().ExtendSelection()
+		m.editor.GetCursor().MoveToDocumentEnd()
+		m.editor.GetCursor().ExtendSelection()
+
+	case tea.KeyEscape:
+		// Clear selection
+		m.editor.GetCursor().ClearSelection()
+
+	case tea.KeyCtrlL:
+		// Toggle line numbers
+		m.editor.ToggleLineNumbers()
+		if m.editor.ShowLineNumbers() {
+			m.showMessage("Line numbers enabled")
+		} else {
+			m.showMessage("Line numbers disabled")
+		}
+
+	case tea.KeyHome:
+		m.editor.GetCursor().MoveToLineStart()
+
+	case tea.KeyEnd:
+		m.editor.GetCursor().MoveToLineEnd()
+
 	case tea.KeyBackspace:
-		m.handleBackspace()
+		m.editor.DeleteText(1)
 
 	case tea.KeyDelete:
-		m.handleDelete()
+		pos := m.editor.GetCursor().GetPosition()
+		m.editor.GetCursor().MoveRight()
+		m.editor.DeleteText(1)
+		m.editor.GetCursor().SetPosition(pos)
 
 	case tea.KeyEnter:
-		m.handleEnter()
+		m.editor.InsertText("\n")
 
 	case tea.KeyRunes:
-		m.insertText(msg.String())
+		m.editor.InsertText(msg.String())
 	}
 
-	m.adjustViewport()
 	return m, nil
 }
 
-func (m *Model) moveCursorUp() {
-	if m.cursor.row > 0 {
-		m.cursor.row--
-		if m.cursor.col > len(m.content[m.cursor.row]) {
-			m.cursor.col = len(m.content[m.cursor.row])
-		}
-	}
-}
-
-func (m *Model) moveCursorDown() {
-	if m.cursor.row < len(m.content)-1 {
-		m.cursor.row++
-		if m.cursor.col > len(m.content[m.cursor.row]) {
-			m.cursor.col = len(m.content[m.cursor.row])
-		}
-	}
-}
-
-func (m *Model) moveCursorLeft() {
-	if m.cursor.col > 0 {
-		m.cursor.col--
-	} else if m.cursor.row > 0 {
-		m.cursor.row--
-		m.cursor.col = len(m.content[m.cursor.row])
-	}
-}
-
-func (m *Model) moveCursorRight() {
-	if m.cursor.row < len(m.content) && m.cursor.col < len(m.content[m.cursor.row]) {
-		m.cursor.col++
-	} else if m.cursor.row < len(m.content)-1 {
-		m.cursor.row++
-		m.cursor.col = 0
-	}
-}
-
-func (m *Model) handleBackspace() {
-	if m.cursor.col > 0 {
-		line := m.content[m.cursor.row]
-		m.content[m.cursor.row] = line[:m.cursor.col-1] + line[m.cursor.col:]
-		m.cursor.col--
-		m.modified = true
-	} else if m.cursor.row > 0 {
-		prevLine := m.content[m.cursor.row-1]
-		currLine := m.content[m.cursor.row]
-		m.cursor.col = len(prevLine)
-		m.content[m.cursor.row-1] = prevLine + currLine
-		m.content = append(m.content[:m.cursor.row], m.content[m.cursor.row+1:]...)
-		m.cursor.row--
-		m.modified = true
-	}
-}
-
-func (m *Model) handleDelete() {
-	if m.cursor.row < len(m.content) && m.cursor.col < len(m.content[m.cursor.row]) {
-		line := m.content[m.cursor.row]
-		m.content[m.cursor.row] = line[:m.cursor.col] + line[m.cursor.col+1:]
-		m.modified = true
-	} else if m.cursor.row < len(m.content)-1 {
-		currLine := m.content[m.cursor.row]
-		nextLine := m.content[m.cursor.row+1]
-		m.content[m.cursor.row] = currLine + nextLine
-		m.content = append(m.content[:m.cursor.row+1], m.content[m.cursor.row+2:]...)
-		m.modified = true
-	}
-}
-
-func (m *Model) handleEnter() {
-	if m.cursor.row >= len(m.content) {
-		return
-	}
-	
-	line := m.content[m.cursor.row]
-	before := line[:m.cursor.col]
-	after := line[m.cursor.col:]
-	
-	m.content[m.cursor.row] = before
-	newContent := make([]string, 0, len(m.content)+1)
-	newContent = append(newContent, m.content[:m.cursor.row+1]...)
-	newContent = append(newContent, after)
-	newContent = append(newContent, m.content[m.cursor.row+1:]...)
-	m.content = newContent
-	
-	m.cursor.row++
-	m.cursor.col = 0
-	m.modified = true
-}
-
-func (m *Model) insertText(text string) {
-	if m.cursor.row >= len(m.content) {
-		return
-	}
-	
-	line := m.content[m.cursor.row]
-	before := line[:m.cursor.col]
-	after := line[m.cursor.col:]
-	
-	m.content[m.cursor.row] = before + text + after
-	m.cursor.col += len(text)
-	m.modified = true
-}
-
-func (m *Model) adjustViewport() {
-	editorHeight := m.height - 2
-	
-	if m.cursor.row < m.offset {
-		m.offset = m.cursor.row
-	} else if m.cursor.row >= m.offset+editorHeight {
-		m.offset = m.cursor.row - editorHeight + 1
-	}
+func (m *Model) showMessage(msg string) {
+	m.message = msg
+	m.messageTimer = 60 // Show for ~1 second at 60fps
 }
