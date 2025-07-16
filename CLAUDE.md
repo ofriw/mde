@@ -21,6 +21,23 @@ make install    # Install locally
 - Target 80% coverage
 - VHS for terminal recordings
 
+### Critical Test Guardrails
+**CURSOR TESTS**: Regression protection for cursor positioning bugs
+- CAUTION: Cursor changes require explicit user approval
+- VERIFY: Run `go test ./test/unit -run Cursor` before cursor modifications
+- VALIDATE: Run `go test ./test/integration -run Cursor` for TUI validation
+
+**Key Behaviors to Verify**:
+- Cursor position (0,0) after file load
+- Content length preserved in rendering
+- Line number offset = 6 characters
+- Cursor visible in TUI output
+
+**User Confirmation Required For**:
+- Changes to cursor positioning behavior
+- Modifications to content length during rendering
+- Updates to cursor position calculations
+
 ## Performance Targets
 - Startup < 100ms
 - Render < 50ms for 1000 lines
