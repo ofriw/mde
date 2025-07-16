@@ -454,47 +454,47 @@ func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine,
 	return result.String()
 }
 
-// renderLineWithStylesAndCursor applies styles to a line and adds cursor at specified position
+// renderLineWithStylesAndCursor applies styles to a line and adds cursor at specified position.
+//
+// CURSOR POSITIONING:
+// - cursorCol is in ContentPos coordinates (includes line number offset)
+// - Line numbers add 6 characters: "%4d │ " (e.g., "   1 │ ")
+// - End-of-line: extend line with space, replace with cursor → "Hello█"
+// - Within line: replace existing character with cursor → "He█lo"
+// - Empty line: extend with space, replace with cursor → "█"
 func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLine, themePlugin theme.Theme, cursorCol int) string {
-	// COORDINATE SYSTEM: cursorCol is in content coordinates (ContentPos)
-	// This means it already includes line number offset if line numbers are enabled
-	// We need to convert back to line-content coordinates for rendering
+	// Convert ContentPos to line-content coordinates
 	adjustedCursorCol := cursorCol
 	if r.config.ShowLineNumbers {
-		// Subtract 6 for line number prefix "%4d │ " to get position within line content
-		adjustedCursorCol = cursorCol - 6
+		adjustedCursorCol = cursorCol - 6 // Subtract line number prefix length
 	}
 	
-	// Ensure cursor is within bounds
+	// Bounds checking
 	if adjustedCursorCol < 0 {
 		adjustedCursorCol = 0
 	}
 	
 	runes := []rune(line.Content)
 	
-	// If cursor is beyond the line, place it at the end
+	// Clamp cursor to end of line
 	if adjustedCursorCol > len(runes) {
 		adjustedCursorCol = len(runes)
 	}
 	
-	// Create a new style range for the cursor
-	cursorStyle := themePlugin.GetStyle(theme.EditorCursor)
-	
-	// If cursor is at end of line, append cursor character
-	if adjustedCursorCol == len(runes) {
-		// Render the line normally, then append cursor
-		normalContent := r.renderLineWithStyles(line, themePlugin)
-		cursorChar := cursorStyle.ToLipgloss().Render("█")
-		return normalContent + cursorChar
+	// Extend line with spaces to cursor position if needed
+	if adjustedCursorCol >= len(runes) {
+		// Extend line with spaces to cursor position
+		spaceCount := adjustedCursorCol + 1 - len(runes)
+		runes = append(runes, []rune(strings.Repeat(" ", spaceCount))...)
 	}
 	
-	// Replace the character at cursor position with cursor character
+	// Replace character at cursor position with cursor block
 	runes[adjustedCursorCol] = '█'
 	
-	// Create new rendered line with cursor character
+	// Create new rendered line with cursor
 	lineWithCursor := plugin.RenderedLine{
 		Content: string(runes),
-		Styles:  line.Styles, // Keep existing styles
+		Styles:  line.Styles,
 	}
 	
 	return r.renderLineWithStyles(lineWithCursor, themePlugin)
