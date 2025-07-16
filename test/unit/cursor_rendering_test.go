@@ -15,6 +15,7 @@
 package unit
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -172,4 +173,119 @@ func stripAnsiEscapes(s string) string {
 	}
 	
 	return result
+}
+
+// TestCursor_VisibilityOnEmptyLine validates cursor visibility on empty lines.
+// Empty line with cursor at (0,0) should show "█" at position 0.
+func TestCursor_VisibilityOnEmptyLine(t *testing.T) {
+	// Create editor with empty line
+	editor := ast.NewEditorWithContent("")
+	
+	// Verify cursor is at (0,0) on empty line
+	pos := editor.GetCursor().GetPosition()
+	require.Equal(t, ast.Position{Line: 0, Col: 0}, pos, "Cursor should be at (0,0) on empty line")
+	
+	// Create renderer and theme
+	renderer := renderers.NewTerminalRenderer()
+	theme := themes.NewDarkTheme()
+	
+	// Render empty document
+	doc := editor.GetDocument()
+	renderedLines, err := renderer.Render(context.Background(), doc, theme)
+	require.NoError(t, err)
+	
+	// Get cursor position
+	contentPos := editor.GetCursorContentPosition()
+	
+	// Render with cursor
+	result := renderer.RenderToStringWithCursor(renderedLines, theme, contentPos.Line, contentPos.Col)
+	
+	// Verify cursor is visible and at position 0
+	cleanResult := stripAnsiEscapes(result)
+	assert.Contains(t, result, "█", "Cursor should be visible on empty line")
+	assert.Equal(t, 0, strings.Index(cleanResult, "█"), "Cursor should be at position 0")
+	assert.Equal(t, 1, utf8.RuneCountInString(cleanResult), "Empty line should contain exactly one character (cursor)")
+}
+
+// TestCursor_VisibilityAtEndOfLine validates cursor visibility at end of line.
+// Line "Hello" with cursor at end should show "Hello█".
+func TestCursor_VisibilityAtEndOfLine(t *testing.T) {
+	content := "Hello"
+	editor := ast.NewEditorWithContent(content)
+	
+	// Move cursor to end of line
+	editor.GetCursor().SetPosition(ast.Position{Line: 0, Col: 5}) // After 'o'
+	
+	// Verify cursor position
+	pos := editor.GetCursor().GetPosition()
+	require.Equal(t, ast.Position{Line: 0, Col: 5}, pos, "Cursor should be at end of line")
+	
+	// Create renderer and theme
+	renderer := renderers.NewTerminalRenderer()
+	theme := themes.NewDarkTheme()
+	
+	// Render document
+	doc := editor.GetDocument()
+	renderedLines, err := renderer.Render(context.Background(), doc, theme)
+	require.NoError(t, err)
+	
+	// Get cursor position
+	contentPos := editor.GetCursorContentPosition()
+	
+	// Render with cursor
+	result := renderer.RenderToStringWithCursor(renderedLines, theme, contentPos.Line, contentPos.Col)
+	
+	// Verify cursor appears at end of line
+	cleanResult := stripAnsiEscapes(result)
+	assert.Contains(t, result, "█", "Cursor should be visible at end of line")
+	assert.Contains(t, cleanResult, content+"█", "Cursor should appear at end of line")
+	
+	// Verify line length extended by exactly 1 character (cursor)
+	originalLength := utf8.RuneCountInString(content)
+	resultLength := utf8.RuneCountInString(cleanResult)
+	assert.Equal(t, originalLength+1, resultLength, "Line should be extended by exactly 1 character")
+	assert.Equal(t, originalLength, strings.Index(cleanResult, "█"), "Cursor should be at end of original content")
+}
+
+// TestCursor_VisibilityWithLineNumbers validates cursor visibility with line numbers.
+// Empty line with line numbers should show "   1 │ █".
+func TestCursor_VisibilityWithLineNumbers(t *testing.T) {
+	// Create editor with empty line and line numbers
+	editor := ast.NewEditorWithContent("")
+	editor.ToggleLineNumbers()
+	
+	// Verify cursor is at (0,0)
+	pos := editor.GetCursor().GetPosition()
+	require.Equal(t, ast.Position{Line: 0, Col: 0}, pos, "Cursor should be at (0,0)")
+	
+	// Create renderer with line numbers
+	renderer := renderers.NewTerminalRenderer()
+	err := renderer.Configure(map[string]interface{}{
+		"showLineNumbers": true,
+	})
+	require.NoError(t, err)
+	
+	theme := themes.NewDarkTheme()
+	
+	// Render document
+	doc := editor.GetDocument()
+	renderedLines, err := renderer.Render(context.Background(), doc, theme)
+	require.NoError(t, err)
+	
+	// Get cursor position (should include line number offset)
+	contentPos := editor.GetCursorContentPosition()
+	
+	// Render with cursor
+	result := renderer.RenderToStringWithCursor(renderedLines, theme, contentPos.Line, contentPos.Col)
+	
+	// Verify cursor visible after line number prefix
+	cleanResult := stripAnsiEscapes(result)
+	assert.Contains(t, result, "█", "Cursor should be visible with line numbers")
+	assert.Contains(t, cleanResult, "1", "Line number should be present")
+	assert.Contains(t, cleanResult, "│", "Line number separator should be present")
+	
+	// Verify expected format: "   1 │ █"
+	expectedPrefix := "   1 │ "
+	assert.True(t, strings.HasPrefix(cleanResult, expectedPrefix), "Should have line number prefix")
+	assert.Equal(t, len(expectedPrefix), strings.Index(cleanResult, "█"), "Cursor should be immediately after line number prefix")
 }
