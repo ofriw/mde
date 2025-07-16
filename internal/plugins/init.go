@@ -44,10 +44,22 @@ func initializeThemes(cfg *config.Config) error {
 		return fmt.Errorf("failed to register dark theme: %w", err)
 	}
 	
-	// Configure theme with user settings
+	// Configure dark theme with user settings
 	themeConfig := cfg.GetPluginConfig("theme", darkTheme.Name())
 	if err := darkTheme.Configure(themeConfig); err != nil {
 		return fmt.Errorf("failed to configure dark theme: %w", err)
+	}
+	
+	// Register light theme
+	lightTheme := themes.NewLightTheme()
+	if err := registry.RegisterTheme(lightTheme.Name(), lightTheme); err != nil {
+		return fmt.Errorf("failed to register light theme: %w", err)
+	}
+	
+	// Configure light theme with user settings
+	lightThemeConfig := cfg.GetPluginConfig("theme", lightTheme.Name())
+	if err := lightTheme.Configure(lightThemeConfig); err != nil {
+		return fmt.Errorf("failed to configure light theme: %w", err)
 	}
 	
 	return nil
@@ -65,6 +77,14 @@ func initializeRenderers(cfg *config.Config) error {
 	
 	// Configure renderer with user settings
 	rendererConfig := cfg.GetPluginConfig("renderer", terminalRenderer.Name())
+	
+	// Add editor config to renderer config
+	if rendererConfig == nil {
+		rendererConfig = make(map[string]interface{})
+	}
+	rendererConfig["showLineNumbers"] = cfg.Editor.ShowLineNumbers
+	rendererConfig["tabWidth"] = cfg.Editor.TabWidth
+	
 	if err := terminalRenderer.Configure(rendererConfig); err != nil {
 		return fmt.Errorf("failed to configure terminal renderer: %w", err)
 	}

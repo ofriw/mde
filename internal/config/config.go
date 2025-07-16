@@ -68,7 +68,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Editor: EditorConfig{
 			TabWidth:        4,
-			ShowLineNumbers: false,
+			ShowLineNumbers: true,
 			ViewportWidth:   80,
 			ViewportHeight:  24,
 			AutoSave:        false,

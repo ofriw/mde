@@ -14,7 +14,8 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/pkg/plugin"
-	"github.com/ofri/mde/pkg/theme"
+	themepkg "github.com/ofri/mde/pkg/theme"
+	"github.com/ofri/mde/internal/plugins/renderers"
 )
 
 type Model struct {
@@ -33,6 +34,9 @@ type Model struct {
 	
 	// Preview mode
 	previewMode  bool
+	
+	// Theme
+	currentTheme string
 }
 
 type EditorMode int
@@ -45,9 +49,15 @@ const (
 )
 
 func New() *Model {
-	return &Model{
+	m := &Model{
 		editor: ast.NewEditor(),
+		currentTheme: "dark", // Default theme
 	}
+	
+	// Synchronize with registry default theme
+	m.syncThemeWithRegistry()
+	
+	return m
 }
 
 func (m *Model) SetFilename(filename string) {
@@ -110,6 +120,14 @@ func (m *Model) View() string {
 	statusBar := m.renderStatusBar()
 	helpBar := m.renderHelpBar()
 	
+	// Apply editor background theme
+	registry := plugin.GetRegistry()
+	if themePlugin, err := registry.GetDefaultTheme(); err == nil {
+		editorBgStyle := themePlugin.GetStyle(themepkg.EditorBackground)
+		editorStyle := editorBgStyle.ToLipgloss().Width(m.width).Height(m.height)
+		return editorStyle.Render(lipgloss.JoinVertical(lipgloss.Top, content, statusBar, helpBar))
+	}
+	
 	return lipgloss.JoinVertical(lipgloss.Top, content, statusBar, helpBar)
 }
 
@@ -125,6 +143,13 @@ func (m *Model) renderEditorContent() string {
 	renderer, err := registry.GetDefaultRenderer()
 	if err != nil {
 		// Fallback to simple rendering
+		return m.renderSimple(editorHeight)
+	}
+	
+	// BUG FIX: Configure renderer to match editor settings
+	// This ensures consistent coordinate system between editor and renderer
+	if err := m.configureRenderer(renderer); err != nil {
+		// If configuration fails, fall back to simple rendering
 		return m.renderSimple(editorHeight)
 	}
 	
@@ -158,31 +183,62 @@ func (m *Model) renderEditorContent() string {
 	
 	result := strings.Join(lines, "\n")
 	
-	return lipgloss.NewStyle().
-		Width(m.width).
-		Height(editorHeight).
-		Render(result)
+	// Apply editor background theme
+	editorStyle := lipgloss.NewStyle().Width(m.width).Height(editorHeight)
+	if registry := plugin.GetRegistry(); registry != nil {
+		if currentTheme, err := registry.GetDefaultTheme(); err == nil {
+			editorBgStyle := currentTheme.GetStyle(themepkg.EditorBackground)
+			editorStyle = editorBgStyle.ToLipgloss().Width(m.width).Height(editorHeight)
+		}
+	}
+	
+	return editorStyle.Render(result)
 }
 
 // renderSimple provides fallback rendering without plugins
 func (m *Model) renderSimple(editorHeight int) string {
-	// Get visible lines
-	lines := m.editor.GetVisibleLines()
+	// Get raw document lines without line numbers for cursor positioning
+	viewport := m.editor.GetViewPort()
+	rawLines := make([]string, 0, viewport.Height)
 	
-	// Add cursor
-	cursorRow, cursorCol := m.editor.GetCursorScreenPosition()
-	if cursorRow >= 0 && cursorRow < len(lines) && cursorCol >= 0 {
-		line := lines[cursorRow]
+	for i := 0; i < viewport.Height; i++ {
+		lineNum := viewport.Top + i
+		if lineNum >= m.editor.GetDocument().LineCount() {
+			break
+		}
+		rawLines = append(rawLines, m.editor.GetDocument().GetLine(lineNum))
+	}
+	
+	// Add cursor to raw lines first
+	cursorPos := m.editor.GetCursor().GetPosition()
+	cursorRow := cursorPos.Line - viewport.Top
+	cursorCol := cursorPos.Col - viewport.Left
+	
+	if cursorRow >= 0 && cursorRow < len(rawLines) && cursorCol >= 0 {
+		line := rawLines[cursorRow]
 		runes := []rune(line)
 		
 		if cursorCol < len(runes) {
+			// Cursor is within the line - replace character
 			runes[cursorCol] = '█'
-		} else {
-			runes = append(runes, []rune(strings.Repeat(" ", cursorCol-len(runes)))...)
-			runes = append(runes, '█')
+			rawLines[cursorRow] = string(runes)
+		} else if cursorCol == len(runes) {
+			// Cursor is at end of line - append cursor
+			rawLines[cursorRow] = line + "█"
 		}
-		
-		lines[cursorRow] = string(runes)
+		// Note: If cursorCol > len(runes), cursor is beyond line end - don't render
+	}
+	
+	// Now add line numbers if enabled
+	lines := make([]string, len(rawLines))
+	for i, line := range rawLines {
+		if m.editor.ShowLineNumbers() {
+			lineNum := viewport.Top + i
+			lineNumStr := fmt.Sprintf("%4d │ ", lineNum+1)
+			lines[i] = lineNumStr + line
+		} else {
+			lines[i] = line
+		}
 	}
 	
 	// Join lines and pad
@@ -199,10 +255,16 @@ func (m *Model) renderSimple(editorHeight int) string {
 		b.WriteString("\n")
 	}
 	
-	return lipgloss.NewStyle().
-		Width(m.width).
-		Height(editorHeight).
-		Render(b.String())
+	// Apply editor background theme for fallback mode
+	editorStyle := lipgloss.NewStyle().Width(m.width).Height(editorHeight)
+	if registry := plugin.GetRegistry(); registry != nil {
+		if currentTheme, err := registry.GetDefaultTheme(); err == nil {
+			editorBgStyle := currentTheme.GetStyle(themepkg.EditorBackground)
+			editorStyle = editorBgStyle.ToLipgloss().Width(m.width).Height(editorHeight)
+		}
+	}
+	
+	return editorStyle.Render(b.String())
 }
 
 // renderPreviewContent renders the markdown content as HTML preview
@@ -212,48 +274,60 @@ func (m *Model) renderPreviewContent() string {
 		editorHeight = 1
 	}
 	
-	// Get markdown content from editor
-	markdownText := m.editor.GetDocument().GetText()
-	
-	// For large documents, optimize by only rendering visible portion
-	var htmlContent string
-	if len(markdownText) > 50000 { // Optimize for documents > 50KB
-		htmlContent = m.convertMarkdownToHTMLLazy(markdownText)
-	} else {
-		htmlContent = m.convertMarkdownToHTML(markdownText)
+	// Try to get renderer and theme plugins
+	registry := plugin.GetRegistry()
+	renderer, err := registry.GetDefaultRenderer()
+	if err != nil {
+		// Fallback to simple rendering
+		return m.renderSimple(editorHeight)
 	}
 	
-	// Convert HTML to terminal-friendly text
-	terminalText := m.convertHTMLToTerminalText(htmlContent)
+	// BUG FIX: Configure renderer to match editor settings
+	// This ensures consistent coordinate system between editor and renderer
+	if err := m.configureRenderer(renderer); err != nil {
+		// If configuration fails, fall back to simple rendering
+		return m.renderSimple(editorHeight)
+	}
 	
-	// Split into lines and handle viewport
-	lines := strings.Split(terminalText, "\n")
+	themePlugin, err := registry.GetDefaultTheme()
+	if err != nil {
+		// Fallback to simple rendering
+		return m.renderSimple(editorHeight)
+	}
+	
+	// Render the document using plugins in preview mode
+	ctx := context.Background()
+	renderedLines, err := renderer.RenderPreview(ctx, m.editor.GetDocument(), themePlugin)
+	if err != nil {
+		// Fallback to simple rendering
+		return m.renderSimple(editorHeight)
+	}
 	
 	// Apply viewport
 	viewport := m.editor.GetViewPort()
 	startLine := viewport.Top
 	endLine := startLine + editorHeight
 	
-	if startLine >= len(lines) {
-		startLine = len(lines) - 1
+	if startLine >= len(renderedLines) {
+		startLine = len(renderedLines) - 1
 		if startLine < 0 {
 			startLine = 0
 		}
 	}
 	
-	if endLine > len(lines) {
-		endLine = len(lines)
+	if endLine > len(renderedLines) {
+		endLine = len(renderedLines)
 	}
 	
 	// Get visible lines
-	var visibleLines []string
-	if startLine < len(lines) {
-		visibleLines = lines[startLine:endLine]
+	var visibleLines []plugin.RenderedLine
+	if startLine < len(renderedLines) {
+		visibleLines = renderedLines[startLine:endLine]
 	}
 	
 	// Pad to fill editor height
 	for len(visibleLines) < editorHeight {
-		visibleLines = append(visibleLines, "")
+		visibleLines = append(visibleLines, plugin.RenderedLine{Content: "", Styles: nil})
 	}
 	
 	// Trim to exact height
@@ -261,12 +335,27 @@ func (m *Model) renderPreviewContent() string {
 		visibleLines = visibleLines[:editorHeight]
 	}
 	
-	result := strings.Join(visibleLines, "\n")
+	// Use the renderer's RenderToString method to apply theme styles
+	var content string
+	if terminalRenderer, ok := renderer.(*renderers.TerminalRenderer); ok {
+		content = terminalRenderer.RenderToString(visibleLines, themePlugin)
+	} else {
+		// Fallback to plain text
+		lines := make([]string, len(visibleLines))
+		for i, line := range visibleLines {
+			lines[i] = line.Content
+		}
+		content = strings.Join(lines, "\n")
+	}
 	
-	return lipgloss.NewStyle().
-		Width(m.width).
-		Height(editorHeight).
-		Render(result)
+	// Apply editor background theme
+	editorStyle := lipgloss.NewStyle().Width(m.width).Height(editorHeight)
+	if themePlugin != nil {
+		editorBgStyle := themePlugin.GetStyle(themepkg.EditorBackground)
+		editorStyle = editorBgStyle.ToLipgloss().Width(m.width).Height(editorHeight)
+	}
+	
+	return editorStyle.Render(content)
 }
 
 // convertMarkdownToHTML converts markdown text to HTML using goldmark
@@ -482,32 +571,43 @@ func (m *Model) parseVisibleLines(parser plugin.ParserPlugin, ctx context.Contex
 }
 
 // renderLinesWithCursor converts rendered lines to display string with cursor
-func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, themePlugin theme.Theme, renderer plugin.RendererPlugin) string {
-	// Convert to plain text for now
-	lines := make([]string, len(renderedLines))
-	for i, line := range renderedLines {
-		lines[i] = line.Content
-	}
-	
-	// Add cursor
-	cursorRow, cursorCol := m.editor.GetCursorScreenPosition()
-	if cursorRow >= 0 && cursorRow < len(lines) && cursorCol >= 0 {
-		line := lines[cursorRow]
-		runes := []rune(line)
+func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, themePlugin themepkg.Theme, renderer plugin.RendererPlugin) string {
+	// Use the renderer's RenderToStringWithCursor method to apply cursor during styling
+	if terminalRenderer, ok := renderer.(*renderers.TerminalRenderer); ok {
+		// NOTE: Renderer is already configured in the main rendering path
+		// so we don't need to configure it again here
 		
-		if cursorCol < len(runes) {
-			// Replace character at cursor position
-			runes[cursorCol] = '█'
-			lines[cursorRow] = string(runes)
-		} else if cursorCol == len(runes) {
-			// Cursor is at end of line - append cursor without extra spaces
-			lines[cursorRow] = line + "█"
+		// NEW COORDINATE SYSTEM: Use ContentPos instead of raw (int, int)
+		contentPos := m.editor.GetCursorContentPosition()
+		return terminalRenderer.RenderToStringWithCursor(renderedLines, themePlugin, contentPos.Line, contentPos.Col)
+	} else {
+		// Fallback to plain text without cursor
+		lines := make([]string, len(renderedLines))
+		for i, line := range renderedLines {
+			lines[i] = line.Content
 		}
-		// If cursor is beyond line end, don't add padding spaces
-		// This prevents the cascading effect described in the bug report
+		return strings.Join(lines, "\n")
+	}
+}
+
+// configureRenderer synchronizes the renderer configuration with the editor's settings.
+// 
+// BUG FIX: This function addresses the cursor positioning bug where the renderer's
+// line numbers configuration becomes desynchronized from the editor's line numbers setting.
+// 
+// ROOT CAUSE: The TUI gets a fresh renderer from the registry but never configures it
+// to match the editor's settings, causing coordinate transformation failures.
+//
+// SOLUTION: Ensure renderer.config.ShowLineNumbers matches editor.ShowLineNumbers()
+// before using the renderer for cursor positioning.
+func (m *Model) configureRenderer(renderer plugin.RendererPlugin) error {
+	// Synchronize renderer configuration with editor settings
+	config := map[string]interface{}{
+		"showLineNumbers": m.editor.ShowLineNumbers(),
 	}
 	
-	return strings.Join(lines, "\n")
+	// Configure the renderer to match editor settings
+	return renderer.Configure(config)
 }
 
 func (m *Model) renderStatusBar() string {
@@ -532,11 +632,15 @@ func (m *Model) renderStatusBar() string {
 		gap = 1
 	}
 	
-	statusBar := lipgloss.NewStyle().
-		Background(lipgloss.Color("240")).
-		Foreground(lipgloss.Color("252")).
-		Width(m.width).
-		Render(status + strings.Repeat(" ", gap) + position)
+	// Get theme style for status bar
+	registry := plugin.GetRegistry()
+	statusBarStyle := lipgloss.NewStyle().Width(m.width)
+	if themePlugin, err := registry.GetDefaultTheme(); err == nil {
+		themeStyle := themePlugin.GetStyle(themepkg.UIStatusBar)
+		statusBarStyle = themeStyle.ToLipgloss().Width(m.width)
+	}
+	
+	statusBar := statusBarStyle.Render(status + strings.Repeat(" ", gap) + position)
 	
 	return statusBar
 }
@@ -551,15 +655,18 @@ func (m *Model) renderHelpBar() string {
 	case ModeGoto:
 		help = "Goto line: " + m.input + " | Enter: Go | Esc: Cancel"
 	default:
-		help = "^O Open  ^S Save  ^Q Quit  ^Z Undo  ^Y Redo  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto  ^P Preview"
+		help = "^O Open  ^S Save  ^Q Quit  ^Z Undo  ^Y Redo  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto  ^P Preview  ^T Theme"
 	}
 	
-	helpBar := lipgloss.NewStyle().
-		Background(lipgloss.Color("237")).
-		Foreground(lipgloss.Color("249")).
-		Width(m.width).
-		Align(lipgloss.Center).
-		Render(help)
+	// Get theme style for help bar
+	registry := plugin.GetRegistry()
+	helpBarStyle := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
+	if themePlugin, err := registry.GetDefaultTheme(); err == nil {
+		themeStyle := themePlugin.GetStyle(themepkg.UIHelpBar)
+		helpBarStyle = themeStyle.ToLipgloss().Width(m.width).Align(lipgloss.Center)
+	}
+	
+	helpBar := helpBarStyle.Render(help)
 	
 	return helpBar
 }

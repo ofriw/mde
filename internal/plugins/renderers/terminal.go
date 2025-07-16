@@ -77,11 +77,206 @@ func (r *TerminalRenderer) Render(ctx context.Context, doc *ast.Document, themeP
 	return lines, nil
 }
 
-// RenderPreview renders a preview of the document
+// RenderPreview renders a preview of the document with markdown formatting
 func (r *TerminalRenderer) RenderPreview(ctx context.Context, doc *ast.Document, themePlugin theme.Theme) ([]plugin.RenderedLine, error) {
-	// For now, preview mode is the same as regular rendering
-	// In the future, this could render markdown with formatted output
-	return r.Render(ctx, doc, themePlugin)
+	// Get the raw text content
+	markdownText := doc.GetText()
+	
+	// Parse markdown and render with formatting
+	lines := strings.Split(markdownText, "\n")
+	renderedLines := make([]plugin.RenderedLine, 0, len(lines))
+	
+	for _, line := range lines {
+		renderedLine := r.renderMarkdownLine(line, themePlugin)
+		renderedLines = append(renderedLines, renderedLine)
+	}
+	
+	return renderedLines, nil
+}
+
+// renderMarkdownLine renders a single line with markdown formatting
+func (r *TerminalRenderer) renderMarkdownLine(line string, themePlugin theme.Theme) plugin.RenderedLine {
+	trimmedLine := strings.TrimSpace(line)
+	
+	// Handle different markdown elements
+	if strings.HasPrefix(trimmedLine, "# ") {
+		// H1 heading
+		text := strings.TrimPrefix(trimmedLine, "# ")
+		headingStyle := themePlugin.GetStyle(theme.MarkdownHeading1)
+		return plugin.RenderedLine{
+			Content: "# " + text,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len("# " + text), Style: headingStyle},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "## ") {
+		// H2 heading
+		text := strings.TrimPrefix(trimmedLine, "## ")
+		headingStyle := themePlugin.GetStyle(theme.MarkdownHeading2)
+		return plugin.RenderedLine{
+			Content: "## " + text,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len("## " + text), Style: headingStyle},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "### ") {
+		// H3 heading
+		text := strings.TrimPrefix(trimmedLine, "### ")
+		headingStyle := themePlugin.GetStyle(theme.MarkdownHeading3)
+		return plugin.RenderedLine{
+			Content: "### " + text,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len("### " + text), Style: headingStyle},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "> ") {
+		// Blockquote
+		text := strings.TrimPrefix(trimmedLine, "> ")
+		quoteStyle := themePlugin.GetStyle(theme.MarkdownQuote)
+		return plugin.RenderedLine{
+			Content: "  " + text,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len("  " + text), Style: quoteStyle},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "- ") || strings.HasPrefix(trimmedLine, "* ") {
+		// Bullet list
+		text := trimmedLine[2:]
+		listStyle := themePlugin.GetStyle(theme.MarkdownList)
+		return plugin.RenderedLine{
+			Content: "  • " + text,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len("  • " + text), Style: listStyle},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "```") {
+		// Code block delimiter
+		codeStyle := themePlugin.GetStyle(theme.MarkdownCodeBlock)
+		return plugin.RenderedLine{
+			Content: line,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len(line), Style: codeStyle},
+			},
+		}
+	} else if len(trimmedLine) > 0 && (trimmedLine[0] >= '0' && trimmedLine[0] <= '9') && strings.Contains(trimmedLine, ". ") {
+		// Numbered list (simple detection)
+		parts := strings.SplitN(trimmedLine, ". ", 2)
+		if len(parts) == 2 {
+			listStyle := themePlugin.GetStyle(theme.MarkdownList)
+			return plugin.RenderedLine{
+				Content: "  " + parts[0] + ". " + parts[1],
+				Styles: []plugin.StyleRange{
+					{Start: 0, End: len("  " + parts[0] + ". " + parts[1]), Style: listStyle},
+				},
+			}
+		}
+	}
+	
+	// Handle inline formatting for regular text
+	return r.renderInlineFormatting(line, themePlugin)
+}
+
+// renderInlineFormatting handles bold, italic, code, and links
+func (r *TerminalRenderer) renderInlineFormatting(line string, themePlugin theme.Theme) plugin.RenderedLine {
+	content := line
+	styles := []plugin.StyleRange{}
+	
+	// Handle **bold**
+	for {
+		// Simple regex replacement for bold
+		if start := strings.Index(content, "**"); start != -1 {
+			if end := strings.Index(content[start+2:], "**"); end != -1 {
+				end += start + 2
+				boldStyle := themePlugin.GetStyle(theme.MarkdownBold)
+				styles = append(styles, plugin.StyleRange{
+					Start: start,
+					End:   end + 2,
+					Style: boldStyle,
+				})
+				// Remove the ** markers for display
+				content = content[:start] + content[start+2:end] + content[end+2:]
+				// Adjust the end position after removal
+				styles[len(styles)-1].End = end - 2
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	
+	// Handle *italic*
+	for {
+		if start := strings.Index(content, "*"); start != -1 {
+			if end := strings.Index(content[start+1:], "*"); end != -1 {
+				end += start + 1
+				// Make sure it's not part of a bold (already processed)
+				validItalic := true
+				for _, style := range styles {
+					if start >= style.Start && end <= style.End {
+						validItalic = false
+						break
+					}
+				}
+				if validItalic {
+					italicStyle := themePlugin.GetStyle(theme.MarkdownItalic)
+					styles = append(styles, plugin.StyleRange{
+						Start: start,
+						End:   end + 1,
+						Style: italicStyle,
+					})
+					// Remove the * markers for display
+					content = content[:start] + content[start+1:end] + content[end+1:]
+					// Adjust the end position after removal
+					styles[len(styles)-1].End = end - 1
+				} else {
+					break
+				}
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	
+	// Handle `code`
+	for {
+		if start := strings.Index(content, "`"); start != -1 {
+			if end := strings.Index(content[start+1:], "`"); end != -1 {
+				end += start + 1
+				codeStyle := themePlugin.GetStyle(theme.MarkdownCode)
+				styles = append(styles, plugin.StyleRange{
+					Start: start,
+					End:   end + 1,
+					Style: codeStyle,
+				})
+				// Remove the ` markers for display
+				content = content[:start] + content[start+1:end] + content[end+1:]
+				// Adjust the end position after removal
+				styles[len(styles)-1].End = end - 1
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	
+	// If no styles applied, use normal text style
+	if len(styles) == 0 {
+		textStyle := themePlugin.GetStyle(theme.TextNormal)
+		styles = append(styles, plugin.StyleRange{
+			Start: 0,
+			End:   len(content),
+			Style: textStyle,
+		})
+	}
+	
+	return plugin.RenderedLine{
+		Content: content,
+		Styles:  styles,
+	}
 }
 
 // RenderLine renders a single line with syntax highlighting
@@ -227,27 +422,112 @@ func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine, themePlug
 	return result.String()
 }
 
+// RenderToStringWithCursor renders lines with cursor positioning
+// cursorRow, cursorCol are in content coordinates (ContentPos)
+func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine, themePlugin theme.Theme, cursorRow, cursorCol int) string {
+	var result strings.Builder
+	
+	for i, line := range lines {
+		// Add line number if enabled
+		if r.config.ShowLineNumbers {
+			lineNumStyle := themePlugin.GetStyle(theme.EditorLineNumber)
+			lineNumStr := fmt.Sprintf("%4d │ ", i+1)
+			styledLineNum := lineNumStyle.ToLipgloss().Render(lineNumStr)
+			result.WriteString(styledLineNum)
+		}
+		
+		// Render the line content with styles, including cursor if on this line
+		if i == cursorRow {
+			content := r.renderLineWithStylesAndCursor(line, themePlugin, cursorCol)
+			result.WriteString(content)
+		} else {
+			content := r.renderLineWithStyles(line, themePlugin)
+			result.WriteString(content)
+		}
+		
+		// Add newline except for last line
+		if i < len(lines)-1 {
+			result.WriteString("\n")
+		}
+	}
+	
+	return result.String()
+}
+
+// renderLineWithStylesAndCursor applies styles to a line and adds cursor at specified position
+func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLine, themePlugin theme.Theme, cursorCol int) string {
+	// COORDINATE SYSTEM: cursorCol is in content coordinates (ContentPos)
+	// This means it already includes line number offset if line numbers are enabled
+	// We need to convert back to line-content coordinates for rendering
+	adjustedCursorCol := cursorCol
+	if r.config.ShowLineNumbers {
+		// Subtract 6 for line number prefix "%4d │ " to get position within line content
+		adjustedCursorCol = cursorCol - 6
+	}
+	
+	// Ensure cursor is within bounds
+	if adjustedCursorCol < 0 {
+		adjustedCursorCol = 0
+	}
+	
+	runes := []rune(line.Content)
+	
+	// If cursor is beyond the line, place it at the end
+	if adjustedCursorCol > len(runes) {
+		adjustedCursorCol = len(runes)
+	}
+	
+	// Create a new style range for the cursor
+	cursorStyle := themePlugin.GetStyle(theme.EditorCursor)
+	
+	// If cursor is at end of line, append cursor character
+	if adjustedCursorCol == len(runes) {
+		// Render the line normally, then append cursor
+		normalContent := r.renderLineWithStyles(line, themePlugin)
+		cursorChar := cursorStyle.ToLipgloss().Render("█")
+		return normalContent + cursorChar
+	}
+	
+	// Replace the character at cursor position with cursor character
+	runes[adjustedCursorCol] = '█'
+	
+	// Create new rendered line with cursor character
+	lineWithCursor := plugin.RenderedLine{
+		Content: string(runes),
+		Styles:  line.Styles, // Keep existing styles
+	}
+	
+	return r.renderLineWithStyles(lineWithCursor, themePlugin)
+}
+
 // renderLineWithStyles applies styles to a line
 func (r *TerminalRenderer) renderLineWithStyles(line plugin.RenderedLine, themePlugin theme.Theme) string {
 	if len(line.Styles) == 0 {
-		return line.Content
+		// Apply default text styling if no styles are provided
+		defaultStyle := themePlugin.GetStyle(theme.TextNormal)
+		return defaultStyle.ToLipgloss().Render(line.Content)
 	}
 	
-	// Sort styles by start position
-	// (In a real implementation, you'd want to handle overlapping styles)
+	// Get default style for unstyled text
+	defaultStyle := themePlugin.GetStyle(theme.TextNormal)
+	
+	// Sort styles by start position to handle overlapping styles properly
+	// For now, we'll process them in the order they appear
 	
 	var result strings.Builder
 	runes := []rune(line.Content)
 	lastEnd := 0
 	
 	for _, styleRange := range line.Styles {
-		// Add unstyled text before this style
+		// Add unstyled text before this style with default styling
 		if styleRange.Start > lastEnd {
-			result.WriteString(string(runes[lastEnd:styleRange.Start]))
+			unstyledText := string(runes[lastEnd:styleRange.Start])
+			styledUnstyledText := defaultStyle.ToLipgloss().Render(unstyledText)
+			result.WriteString(styledUnstyledText)
 		}
 		
-		// Apply the style
-		if styleRange.End <= len(runes) {
+		// Apply the style - ensure bounds are valid
+		if styleRange.Start >= 0 && styleRange.End <= len(runes) && styleRange.Start < styleRange.End {
 			text := string(runes[styleRange.Start:styleRange.End])
 			styledText := styleRange.Style.ToLipgloss().Render(text)
 			result.WriteString(styledText)
@@ -255,9 +535,11 @@ func (r *TerminalRenderer) renderLineWithStyles(line plugin.RenderedLine, themeP
 		}
 	}
 	
-	// Add any remaining unstyled text
+	// Add any remaining unstyled text with default styling
 	if lastEnd < len(runes) {
-		result.WriteString(string(runes[lastEnd:]))
+		remainingText := string(runes[lastEnd:])
+		styledRemainingText := defaultStyle.ToLipgloss().Render(remainingText)
+		result.WriteString(styledRemainingText)
 	}
 	
 	return result.String()

@@ -102,7 +102,7 @@ func (t *DarkTheme) initializeStyles() {
 	}
 	
 	t.styles[theme.EditorCursor] = theme.Style{
-		Background: t.colorScheme.Primary,
+		Background: t.colorScheme.Foreground,
 		Foreground: t.colorScheme.Background,
 	}
 	
@@ -123,20 +123,24 @@ func (t *DarkTheme) initializeStyles() {
 	// Text elements
 	t.styles[theme.TextNormal] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.TextBold] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 		Bold:       true,
 	}
 	
 	t.styles[theme.TextItalic] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 		Italic:     true,
 	}
 	
 	t.styles[theme.TextStrikethrough] = theme.Style{
 		Foreground:    t.colorScheme.ForegroundAlt,
+		Background:    t.colorScheme.Background,
 		Strikethrough: true,
 	}
 	
@@ -147,48 +151,58 @@ func (t *DarkTheme) initializeStyles() {
 	
 	t.styles[theme.TextLink] = theme.Style{
 		Foreground: t.colorScheme.Primary,
+		Background: t.colorScheme.Background,
 		Underline:  true,
 	}
 	
 	// Markdown elements
 	t.styles[theme.MarkdownHeading] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+		Background: t.colorScheme.Background,
 		Bold:       true,
 	}
 	
 	t.styles[theme.MarkdownHeading1] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+		Background: t.colorScheme.Background,
 		Bold:       true,
 	}
 	
 	t.styles[theme.MarkdownHeading2] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+		Background: t.colorScheme.Background,
 		Bold:       true,
 	}
 	
 	t.styles[theme.MarkdownHeading3] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownHeading4] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownHeading5] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownHeading6] = theme.Style{
 		Foreground: t.colorScheme.Accent,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownBold] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 		Bold:       true,
 	}
 	
 	t.styles[theme.MarkdownItalic] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 		Italic:     true,
 	}
 	
@@ -199,27 +213,33 @@ func (t *DarkTheme) initializeStyles() {
 	
 	t.styles[theme.MarkdownLink] = theme.Style{
 		Foreground: t.colorScheme.Primary,
+		Background: t.colorScheme.Background,
 		Underline:  true,
 	}
 	
 	t.styles[theme.MarkdownLinkText] = theme.Style{
 		Foreground: t.colorScheme.Primary,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownLinkURL] = theme.Style{
 		Foreground: t.colorScheme.ForegroundAlt,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownImage] = theme.Style{
 		Foreground: t.colorScheme.Warning,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownDelimiter] = theme.Style{
 		Foreground: t.colorScheme.ForegroundAlt,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownQuote] = theme.Style{
 		Foreground: t.colorScheme.ForegroundAlt,
+		Background: t.colorScheme.Background,
 		Italic:     true,
 	}
 	
@@ -230,54 +250,66 @@ func (t *DarkTheme) initializeStyles() {
 	
 	t.styles[theme.MarkdownTable] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownTableHeader] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 		Bold:       true,
 	}
 	
 	t.styles[theme.MarkdownList] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.MarkdownListItem] = theme.Style{
 		Foreground: t.colorScheme.Foreground,
+		Background: t.colorScheme.Background,
 	}
 	
 	// Syntax highlighting
 	t.styles[theme.SyntaxKeyword] = theme.Style{
 		Foreground: t.colorScheme.SyntaxKeyword,
+		Background: t.colorScheme.Background,
 		Bold:       true,
 	}
 	
 	t.styles[theme.SyntaxString] = theme.Style{
 		Foreground: t.colorScheme.SyntaxString,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.SyntaxComment] = theme.Style{
 		Foreground: t.colorScheme.SyntaxComment,
+		Background: t.colorScheme.Background,
 		Italic:     true,
 	}
 	
 	t.styles[theme.SyntaxNumber] = theme.Style{
 		Foreground: t.colorScheme.SyntaxNumber,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.SyntaxOperator] = theme.Style{
 		Foreground: t.colorScheme.SyntaxOperator,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.SyntaxFunction] = theme.Style{
 		Foreground: t.colorScheme.SyntaxFunction,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.SyntaxVariable] = theme.Style{
 		Foreground: t.colorScheme.SyntaxVariable,
+		Background: t.colorScheme.Background,
 	}
 	
 	t.styles[theme.SyntaxType] = theme.Style{
 		Foreground: t.colorScheme.SyntaxType,
+		Background: t.colorScheme.Background,
 	}
 	
 	// UI elements

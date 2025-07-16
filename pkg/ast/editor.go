@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-// Editor manages the document, cursor, and history
+// Editor manages the document, cursor, and history.
+// It implements CoordinateTransformer and CoordinateValidator interfaces.
 type Editor struct {
 	document   *Document
 	cursor     *Cursor
@@ -373,6 +374,7 @@ func (e *Editor) AdjustViewPort() {
 }
 
 // GetCursorScreenPosition returns the cursor position relative to viewport
+// DEPRECATED: Use GetCursorContentPosition() instead for explicit coordinate types
 func (e *Editor) GetCursorScreenPosition() (int, int) {
 	pos := e.cursor.GetPosition()
 	screenRow := pos.Line - e.viewport.Top
@@ -383,7 +385,97 @@ func (e *Editor) GetCursorScreenPosition() (int, int) {
 		screenCol += 6 // "1234 │ "
 	}
 	
+	// Note: We return the calculated screen position even if it's outside viewport bounds
+	// The caller is responsible for checking if the cursor is visible
 	return screenRow, screenCol
+}
+
+// GetCursorContentPosition returns the cursor position in content coordinates.
+// This is the explicit coordinate transformation from DocumentPos to ContentPos.
+func (e *Editor) GetCursorContentPosition() ContentPos {
+	docPos := e.GetCursorDocumentPosition()
+	return e.TransformDocumentToContent(docPos)
+}
+
+// GetCursorDocumentPosition returns the cursor position in document coordinates.
+func (e *Editor) GetCursorDocumentPosition() DocumentPos {
+	pos := e.cursor.GetPosition()
+	return DocumentPos{Line: pos.Line, Col: pos.Col}
+}
+
+// TransformDocumentToContent converts document coordinates to content coordinates.
+// This transformation includes viewport offset and line number offset.
+func (e *Editor) TransformDocumentToContent(docPos DocumentPos) ContentPos {
+	// STEP 1: Apply viewport offset (document → viewport)
+	contentPos := ContentPos{
+		Line: docPos.Line - e.viewport.Top,
+		Col:  docPos.Col - e.viewport.Left,
+	}
+	
+	// STEP 2: Apply line number offset (viewport → content)
+	if e.lineNumbers {
+		contentPos.Col += 6 // "  1 │ " prefix
+	}
+	
+	return contentPos
+}
+
+// GetViewportInfo returns current viewport state for debugging.
+func (e *Editor) GetViewportInfo() ViewportInfo {
+	return ViewportInfo{
+		Top:         e.viewport.Top,
+		Left:        e.viewport.Left,
+		Width:       e.viewport.Width,
+		Height:      e.viewport.Height,
+		LineNumbers: e.lineNumbers,
+	}
+}
+
+// ValidateDocumentPos checks if a document position is within bounds.
+func (e *Editor) ValidateDocumentPos(pos DocumentPos) error {
+	if !pos.IsValid() {
+		return NewDocumentCoordinateError(pos, "negative coordinates")
+	}
+	
+	if pos.Line >= e.document.LineCount() {
+		return NewDocumentCoordinateError(pos, 
+			fmt.Sprintf("line %d >= document line count %d", pos.Line, e.document.LineCount()))
+	}
+	
+	lineLength := e.document.GetLineLength(pos.Line)
+	if pos.Col > lineLength {
+		return NewDocumentCoordinateError(pos,
+			fmt.Sprintf("column %d > line length %d", pos.Col, lineLength))
+	}
+	
+	return nil
+}
+
+// ValidateContentPos checks if a content position is within bounds.
+func (e *Editor) ValidateContentPos(pos ContentPos) error {
+	if !pos.IsValid() {
+		return NewContentCoordinateError(pos, "negative coordinates")
+	}
+	
+	if pos.Line >= e.viewport.Height {
+		return NewContentCoordinateError(pos,
+			fmt.Sprintf("line %d >= viewport height %d", pos.Line, e.viewport.Height))
+	}
+	
+	// CRITICAL CHECK: Content position should account for line numbers
+	if e.lineNumbers && pos.Col < 6 {
+		return NewContentCoordinateError(pos,
+			fmt.Sprintf("column %d < 6 but line numbers enabled (missing line number offset)", pos.Col))
+	}
+	
+	// Calculate maximum content width
+	maxContentWidth := e.viewport.Width
+	if pos.Col > maxContentWidth {
+		return NewContentCoordinateError(pos,
+			fmt.Sprintf("column %d > viewport width %d", pos.Col, maxContentWidth))
+	}
+	
+	return nil
 }
 
 // FindText searches for text in the document starting from current cursor position

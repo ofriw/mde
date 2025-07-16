@@ -6,6 +6,7 @@ import (
 	
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ofri/mde/pkg/ast"
+	"github.com/ofri/mde/pkg/plugin"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -167,6 +168,10 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.showMessage("Preview mode disabled")
 		}
+		
+	case tea.KeyCtrlT:
+		// Toggle theme
+		return m.toggleTheme()
 
 	case tea.KeyHome:
 		m.editor.GetCursor().MoveToLineStart()
@@ -353,17 +358,18 @@ func (m *Model) handleMouseClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	docRow := viewport.Top + clickRow
 	docCol := clickCol
 	
-	// Account for line numbers
+	// Account for line numbers first
 	if m.editor.ShowLineNumbers() {
 		if clickCol < 6 {
 			// Click is in line number area, move to start of line
 			docCol = 0
 		} else {
+			// Click is in content area - remove line number offset
 			docCol = clickCol - 6
 		}
 	}
 	
-	// Adjust for viewport
+	// Adjust for viewport offset (this is the document coordinate)
 	docCol += viewport.Left
 	
 	// Ensure coordinates are within document bounds
@@ -410,16 +416,18 @@ func (m *Model) handleMouseDrag(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	docRow := viewport.Top + dragRow
 	docCol := dragCol
 	
-	// Account for line numbers
+	// Account for line numbers first
 	if m.editor.ShowLineNumbers() {
 		if dragCol < 6 {
+			// Drag is in line number area
 			docCol = 0
 		} else {
+			// Drag is in content area - remove line number offset
 			docCol = dragCol - 6
 		}
 	}
 	
-	// Adjust for viewport
+	// Adjust for viewport offset (this is the document coordinate)
 	docCol += viewport.Left
 	
 	// Ensure coordinates are within document bounds
@@ -451,4 +459,33 @@ func (m *Model) handleMouseDrag(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	m.editor.GetCursor().ExtendSelection()
 	
 	return m, nil
+}
+
+// toggleTheme switches between light and dark themes
+func (m *Model) toggleTheme() (tea.Model, tea.Cmd) {
+	registry := plugin.GetRegistry()
+	
+	// Toggle between light and dark themes
+	if m.currentTheme == "dark" {
+		m.currentTheme = "light"
+	} else {
+		m.currentTheme = "dark"
+	}
+	
+	// Set the new theme as default
+	if err := registry.SetDefaultTheme(m.currentTheme); err != nil {
+		m.showMessage("Error switching theme: " + err.Error())
+		return m, nil
+	}
+	
+	m.showMessage("Theme switched to " + m.currentTheme)
+	return m, nil
+}
+
+// syncThemeWithRegistry synchronizes the model's currentTheme with the registry default
+func (m *Model) syncThemeWithRegistry() {
+	registry := plugin.GetRegistry()
+	if defaultTheme, err := registry.GetDefaultTheme(); err == nil {
+		m.currentTheme = defaultTheme.Name()
+	}
 }
