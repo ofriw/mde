@@ -32,6 +32,9 @@ type Model struct {
 	replaceText  string
 	caseSensitive bool
 	
+	// Save prompt context
+	savePromptContext string
+	
 	// Preview mode
 	previewMode  bool
 	
@@ -46,6 +49,7 @@ const (
 	ModeFind
 	ModeReplace
 	ModeGoto
+	ModeSavePrompt
 )
 
 func New() *Model {
@@ -664,6 +668,9 @@ func (m *Model) renderHelpBar() string {
 		help = "Replace: " + m.input + " with: " + m.replaceText + " | Enter: Replace | Esc: Cancel"
 	case ModeGoto:
 		help = "Goto line: " + m.input + " | Enter: Go | Esc: Cancel"
+	case ModeSavePrompt:
+		filename := m.editor.GetDocument().GetFilename()
+		help = fmt.Sprintf("Save changes to %s? (y/n/c)", filename)
 	default:
 		help = "^O Open  ^S Save  ^Q Quit  ^Z Undo  ^Y Redo  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto  ^P Preview  ^T Theme"
 	}

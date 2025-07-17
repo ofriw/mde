@@ -51,6 +51,12 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyCtrlQ:
+		// Check if file has unsaved changes
+		if m.editor.GetDocument().IsModified() {
+			m.mode = ModeSavePrompt
+			m.savePromptContext = "quit"
+			return m, nil
+		}
 		return m, tea.Quit
 
 	case tea.KeyCtrlS:
@@ -214,6 +220,7 @@ func (m *Model) handleModalKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeNormal
 		m.input = ""
 		m.replaceText = ""
+		m.savePromptContext = ""
 		return m, nil
 		
 	case tea.KeyEnter:
@@ -240,6 +247,10 @@ func (m *Model) handleModalKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 		
 	case tea.KeyRunes:
+		// Handle save prompt responses
+		if m.mode == ModeSavePrompt {
+			return m.handleSavePrompt(msg.String())
+		}
 		// Add character to input
 		m.input += msg.String()
 		return m, nil
@@ -305,6 +316,53 @@ func (m *Model) handleGoto() (tea.Model, tea.Cmd) {
 	
 	m.mode = ModeNormal
 	m.input = ""
+	return m, nil
+}
+
+func (m *Model) handleSavePrompt(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "y", "Y":
+		// Save and execute context action
+		if err := m.editor.SaveFile(""); err != nil {
+			m.showMessage("Error saving file: " + err.Error())
+			m.mode = ModeNormal
+			m.savePromptContext = ""
+			return m, nil
+		}
+		m.showMessage("File saved")
+		m.mode = ModeNormal
+		
+		// Execute context action
+		context := m.savePromptContext
+		m.savePromptContext = ""
+		
+		if context == "quit" {
+			return m, tea.Quit
+		}
+		
+		return m, nil
+		
+	case "n", "N":
+		// Don't save, execute context action
+		m.mode = ModeNormal
+		
+		// Execute context action
+		context := m.savePromptContext
+		m.savePromptContext = ""
+		
+		if context == "quit" {
+			return m, tea.Quit
+		}
+		
+		return m, nil
+		
+	case "c", "C":
+		// Cancel, return to editor
+		m.mode = ModeNormal
+		m.savePromptContext = ""
+		return m, nil
+	}
+	
 	return m, nil
 }
 
