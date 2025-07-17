@@ -198,11 +198,11 @@ func (m *Model) renderEditorContent() string {
 // renderSimple provides fallback rendering without plugins
 func (m *Model) renderSimple(editorHeight int) string {
 	// Get raw document lines without line numbers for cursor positioning
-	viewport := m.editor.GetViewPort()
-	rawLines := make([]string, 0, viewport.Height)
+	viewport := m.editor.GetViewport()
+	rawLines := make([]string, 0, viewport.GetHeight())
 	
-	for i := 0; i < viewport.Height; i++ {
-		lineNum := viewport.Top + i
+	for i := 0; i < viewport.GetHeight(); i++ {
+		lineNum := viewport.GetTopLine() + i
 		if lineNum >= m.editor.GetDocument().LineCount() {
 			break
 		}
@@ -210,9 +210,9 @@ func (m *Model) renderSimple(editorHeight int) string {
 	}
 	
 	// Add cursor to raw lines first
-	cursorPos := m.editor.GetCursor().GetPosition()
-	cursorRow := cursorPos.Line - viewport.Top
-	cursorCol := cursorPos.Col - viewport.Left
+	cursorPos := m.editor.GetCursor().GetBufferPos()
+	cursorRow := cursorPos.Line - viewport.GetTopLine()
+	cursorCol := cursorPos.Col - viewport.GetLeftColumn()
 	
 	if cursorRow >= 0 && cursorRow < len(rawLines) && cursorCol >= 0 {
 		line := rawLines[cursorRow]
@@ -233,8 +233,8 @@ func (m *Model) renderSimple(editorHeight int) string {
 	lines := make([]string, len(rawLines))
 	for i, line := range rawLines {
 		if m.editor.ShowLineNumbers() {
-			lineNum := viewport.Top + i
-			lineNumStr := fmt.Sprintf("%4d │ ", lineNum+1)
+			lineNum := viewport.GetTopLine() + i
+			lineNumStr := m.editor.FormatLineNumber(lineNum + 1)
 			lines[i] = lineNumStr + line
 		} else {
 			lines[i] = line
@@ -304,8 +304,8 @@ func (m *Model) renderPreviewContent() string {
 	}
 	
 	// Apply viewport
-	viewport := m.editor.GetViewPort()
-	startLine := viewport.Top
+	viewport := m.editor.GetViewport()
+	startLine := viewport.GetTopLine()
 	endLine := startLine + editorHeight
 	
 	if startLine >= len(renderedLines) {
@@ -391,12 +391,12 @@ func (m *Model) convertMarkdownToHTML(markdownText string) string {
 // convertMarkdownToHTMLLazy converts only the visible portion of markdown for large documents
 func (m *Model) convertMarkdownToHTMLLazy(markdownText string) string {
 	lines := strings.Split(markdownText, "\n")
-	viewport := m.editor.GetViewPort()
+	viewport := m.editor.GetViewport()
 	
 	// Calculate visible range with buffer for context
 	bufferSize := 100 // Process 100 lines above and below for context
-	startLine := viewport.Top - bufferSize
-	endLine := viewport.Top + viewport.Height + bufferSize
+	startLine := viewport.GetTopLine() - bufferSize
+	endLine := viewport.GetTopLine() + viewport.GetHeight() + bufferSize
 	
 	if startLine < 0 {
 		startLine = 0
@@ -543,12 +543,12 @@ func (m *Model) parseAllLines(parser plugin.ParserPlugin, ctx context.Context) {
 // parseVisibleLines parses only the visible lines and a buffer around them
 func (m *Model) parseVisibleLines(parser plugin.ParserPlugin, ctx context.Context) {
 	doc := m.editor.GetDocument()
-	viewport := m.editor.GetViewPort()
+	viewport := m.editor.GetViewport()
 	
 	// Parse visible lines plus a buffer for smooth scrolling
 	bufferSize := 50 // Parse 50 lines above and below visible area
-	startLine := viewport.Top - bufferSize
-	endLine := viewport.Top + viewport.Height + bufferSize
+	startLine := viewport.GetTopLine() - bufferSize
+	endLine := viewport.GetTopLine() + viewport.GetHeight() + bufferSize
 	
 	// Ensure bounds are valid
 	if startLine < 0 {
@@ -577,9 +577,18 @@ func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, theme
 		// NOTE: Renderer is already configured in the main rendering path
 		// so we don't need to configure it again here
 		
-		// NEW COORDINATE SYSTEM: Use ContentPos instead of raw (int, int)
-		contentPos := m.editor.GetCursorContentPosition()
-		return terminalRenderer.RenderToStringWithCursor(renderedLines, themePlugin, contentPos.Line, contentPos.Col)
+		// NEW COORDINATE SYSTEM: Use ScreenPos from CursorManager
+		screenPos, err := m.editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, render without cursor
+			lines := make([]string, len(renderedLines))
+			for i, line := range renderedLines {
+				lines[i] = line.Content
+			}
+			return strings.Join(lines, "\n")
+		}
+		
+		return terminalRenderer.RenderToStringWithCursor(renderedLines, themePlugin, screenPos.Row, screenPos.Col)
 	} else {
 		// Fallback to plain text without cursor
 		lines := make([]string, len(renderedLines))
@@ -603,7 +612,8 @@ func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, theme
 func (m *Model) configureRenderer(renderer plugin.RendererPlugin) error {
 	// Synchronize renderer configuration with editor settings
 	config := map[string]interface{}{
-		"showLineNumbers": m.editor.ShowLineNumbers(),
+		"showLineNumbers":  m.editor.ShowLineNumbers(),
+		"lineNumberWidth": m.editor.GetLineNumberWidth(),
 	}
 	
 	// Configure the renderer to match editor settings
@@ -624,7 +634,7 @@ func (m *Model) renderStatusBar() string {
 		status = m.message
 	}
 	
-	pos := m.editor.GetCursor().GetPosition()
+	pos := m.editor.GetCursor().GetBufferPos()
 	position := fmt.Sprintf("Ln %d, Col %d", pos.Line+1, pos.Col+1)
 	
 	gap := m.width - lipgloss.Width(status) - lipgloss.Width(position)
@@ -669,4 +679,25 @@ func (m *Model) renderHelpBar() string {
 	helpBar := helpBarStyle.Render(help)
 	
 	return helpBar
+}
+
+// screenToBufferSafe converts screen coordinates to buffer coordinates with safe bounds checking.
+// Handles editor area bounds and uses document validation for final position safety.
+// USAGE: bufferPos := m.screenToBufferSafe(mouseRow, mouseCol)
+func (m *Model) screenToBufferSafe(row, col int) ast.BufferPos {
+	// Check if position is within editor area (exclude status and help bars)
+	editorHeight := m.height - 2
+	if row >= editorHeight {
+		row = editorHeight - 1
+	}
+	if row < 0 {
+		row = 0
+	}
+	
+	// Use viewport's safe transformation
+	screenPos := ast.ScreenPos{Row: row, Col: col}
+	bufferPos := m.editor.GetViewport().ScreenToBuffer(screenPos)
+	
+	// Apply document bounds validation using existing ValidatePosition
+	return m.editor.GetDocument().ValidatePosition(bufferPos)
 }

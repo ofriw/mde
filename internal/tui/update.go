@@ -5,7 +5,6 @@ import (
 	"strings"
 	
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/pkg/plugin"
 )
 
@@ -82,51 +81,51 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyUp:
-		m.editor.GetCursor().MoveUp()
+		m.editor.MoveCursorUp()
 
 	case tea.KeyDown:
-		m.editor.GetCursor().MoveDown()
+		m.editor.MoveCursorDown()
 
 	case tea.KeyLeft:
-		m.editor.GetCursor().MoveLeft()
+		m.editor.MoveCursorLeft()
 
 	case tea.KeyRight:
-		m.editor.GetCursor().MoveRight()
+		m.editor.MoveCursorRight()
 
 	case tea.KeyShiftUp:
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
-		m.editor.GetCursor().MoveUp()
+		m.editor.MoveCursorUp()
 		m.editor.GetCursor().ExtendSelection()
 
 	case tea.KeyShiftDown:
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
-		m.editor.GetCursor().MoveDown()
+		m.editor.MoveCursorDown()
 		m.editor.GetCursor().ExtendSelection()
 
 	case tea.KeyShiftLeft:
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
-		m.editor.GetCursor().MoveLeft()
+		m.editor.MoveCursorLeft()
 		m.editor.GetCursor().ExtendSelection()
 
 	case tea.KeyShiftRight:
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
-		m.editor.GetCursor().MoveRight()
+		m.editor.MoveCursorRight()
 		m.editor.GetCursor().ExtendSelection()
 
 	case tea.KeyCtrlA:
 		// Select all
 		m.editor.GetCursor().StartSelection()
-		m.editor.GetCursor().MoveToDocumentStart()
+		m.editor.MoveCursorToDocumentStart()
 		m.editor.GetCursor().ExtendSelection()
-		m.editor.GetCursor().MoveToDocumentEnd()
+		m.editor.MoveCursorToDocumentEnd()
 		m.editor.GetCursor().ExtendSelection()
 
 	case tea.KeyEscape:
@@ -174,19 +173,19 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.toggleTheme()
 
 	case tea.KeyHome:
-		m.editor.GetCursor().MoveToLineStart()
+		m.editor.MoveCursorToLineStart()
 
 	case tea.KeyEnd:
-		m.editor.GetCursor().MoveToLineEnd()
+		m.editor.MoveCursorToLineEnd()
 
 	case tea.KeyBackspace:
 		m.editor.DeleteText(1)
 
 	case tea.KeyDelete:
-		pos := m.editor.GetCursor().GetPosition()
-		m.editor.GetCursor().MoveRight()
+		pos := m.editor.GetCursor().GetBufferPos()
+		m.editor.MoveCursorRight()
 		m.editor.DeleteText(1)
-		m.editor.GetCursor().SetPosition(pos)
+		m.editor.GetCursor().SetBufferPos(pos)
 
 	case tea.KeyEnter:
 		m.editor.InsertText("\n")
@@ -260,7 +259,7 @@ func (m *Model) handleFind() (tea.Model, tea.Cmd) {
 	if pos == nil {
 		m.showMessage("Not found: " + m.input)
 	} else {
-		m.editor.GetCursor().SetPosition(*pos)
+		m.editor.GetCursor().SetBufferPos(*pos)
 		m.showMessage("Found: " + m.input)
 	}
 	
@@ -328,13 +327,13 @@ func (m *Model) handleMouseEvent(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	case tea.MouseButtonWheelUp:
 		// Scroll up
 		for i := 0; i < 3; i++ {
-			m.editor.GetCursor().MoveUp()
+			m.editor.MoveCursorUp()
 		}
 		
 	case tea.MouseButtonWheelDown:
 		// Scroll down
 		for i := 0; i < 3; i++ {
-			m.editor.GetCursor().MoveDown()
+			m.editor.MoveCursorDown()
 		}
 	}
 	
@@ -342,111 +341,19 @@ func (m *Model) handleMouseEvent(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMouseClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// Convert screen coordinates to editor coordinates
-	clickRow := msg.Y
-	clickCol := msg.X
+	// Use safe coordinate transformation
+	bufferPos := m.screenToBufferSafe(msg.Y, msg.X)
 	
-	// Check if click is in editor area (not status/help bars)
-	editorHeight := m.height - 2
-	if clickRow >= editorHeight {
-		// Click is in status or help bar, ignore
-		return m, nil
-	}
-	
-	// Convert screen position to document position
-	viewport := m.editor.GetViewPort()
-	docRow := viewport.Top + clickRow
-	docCol := clickCol
-	
-	// Account for line numbers first
-	if m.editor.ShowLineNumbers() {
-		if clickCol < 6 {
-			// Click is in line number area, move to start of line
-			docCol = 0
-		} else {
-			// Click is in content area - remove line number offset
-			docCol = clickCol - 6
-		}
-	}
-	
-	// Adjust for viewport offset (this is the document coordinate)
-	docCol += viewport.Left
-	
-	// Ensure coordinates are within document bounds
-	if docRow >= m.editor.GetDocument().LineCount() {
-		docRow = m.editor.GetDocument().LineCount() - 1
-	}
-	
-	if docRow < 0 {
-		docRow = 0
-	}
-	
-	lineLength := len(m.editor.GetDocument().GetLine(docRow))
-	if docCol > lineLength {
-		docCol = lineLength
-	}
-	
-	if docCol < 0 {
-		docCol = 0
-	}
-	
-	// Clear any existing selection
+	// Clear any existing selection and move cursor
 	m.editor.GetCursor().ClearSelection()
-	
-	// Move cursor to clicked position
-	newPos := ast.Position{Line: docRow, Col: docCol}
-	m.editor.GetCursor().SetPosition(newPos)
+	m.editor.GetCursor().SetBufferPos(bufferPos)
 	
 	return m, nil
 }
 
 func (m *Model) handleMouseDrag(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// Convert screen coordinates to editor coordinates
-	dragRow := msg.Y
-	dragCol := msg.X
-	
-	// Check if drag is in editor area
-	editorHeight := m.height - 2
-	if dragRow >= editorHeight {
-		return m, nil
-	}
-	
-	// Convert screen position to document position
-	viewport := m.editor.GetViewPort()
-	docRow := viewport.Top + dragRow
-	docCol := dragCol
-	
-	// Account for line numbers first
-	if m.editor.ShowLineNumbers() {
-		if dragCol < 6 {
-			// Drag is in line number area
-			docCol = 0
-		} else {
-			// Drag is in content area - remove line number offset
-			docCol = dragCol - 6
-		}
-	}
-	
-	// Adjust for viewport offset (this is the document coordinate)
-	docCol += viewport.Left
-	
-	// Ensure coordinates are within document bounds
-	if docRow >= m.editor.GetDocument().LineCount() {
-		docRow = m.editor.GetDocument().LineCount() - 1
-	}
-	
-	if docRow < 0 {
-		docRow = 0
-	}
-	
-	lineLength := len(m.editor.GetDocument().GetLine(docRow))
-	if docCol > lineLength {
-		docCol = lineLength
-	}
-	
-	if docCol < 0 {
-		docCol = 0
-	}
+	// Use safe coordinate transformation
+	bufferPos := m.screenToBufferSafe(msg.Y, msg.X)
 	
 	// Start selection if not already started
 	if !m.editor.GetCursor().HasSelection() {
@@ -454,8 +361,7 @@ func (m *Model) handleMouseDrag(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	
 	// Move cursor to dragged position and extend selection
-	newPos := ast.Position{Line: docRow, Col: docCol}
-	m.editor.GetCursor().SetPosition(newPos)
+	m.editor.GetCursor().SetBufferPos(bufferPos)
 	m.editor.GetCursor().ExtendSelection()
 	
 	return m, nil
