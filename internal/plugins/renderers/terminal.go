@@ -46,6 +46,10 @@ func (r *TerminalRenderer) Configure(options map[string]interface{}) error {
 		r.config.ShowLineNumbers = showLineNumbers
 	}
 	
+	if lineNumberWidth, ok := options["lineNumberWidth"].(int); ok {
+		r.config.LineNumberWidth = lineNumberWidth
+	}
+	
 	if previewMode, ok := options["previewMode"].(bool); ok {
 		r.config.PreviewMode = previewMode
 	}
@@ -404,7 +408,7 @@ func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine, themePlug
 		// Add line number if enabled
 		if r.config.ShowLineNumbers {
 			lineNumStyle := themePlugin.GetStyle(theme.EditorLineNumber)
-			lineNumStr := fmt.Sprintf("%4d │ ", i+1)
+			lineNumStr := r.formatLineNumber(i+1, len(lines))
 			styledLineNum := lineNumStyle.ToLipgloss().Render(lineNumStr)
 			result.WriteString(styledLineNum)
 		}
@@ -423,7 +427,7 @@ func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine, themePlug
 }
 
 // RenderToStringWithCursor renders lines with cursor positioning
-// cursorRow, cursorCol are in content coordinates (ContentPos)
+// cursorRow, cursorCol are in screen coordinates (ScreenPos)
 func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine, themePlugin theme.Theme, cursorRow, cursorCol int) string {
 	var result strings.Builder
 	
@@ -431,7 +435,7 @@ func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine,
 		// Add line number if enabled
 		if r.config.ShowLineNumbers {
 			lineNumStyle := themePlugin.GetStyle(theme.EditorLineNumber)
-			lineNumStr := fmt.Sprintf("%4d │ ", i+1)
+			lineNumStr := r.formatLineNumber(i+1, len(lines))
 			styledLineNum := lineNumStyle.ToLipgloss().Render(lineNumStr)
 			result.WriteString(styledLineNum)
 		}
@@ -457,16 +461,17 @@ func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine,
 // renderLineWithStylesAndCursor applies styles to a line and adds cursor at specified position.
 //
 // CURSOR POSITIONING:
-// - cursorCol is in ContentPos coordinates (includes line number offset)
-// - Line numbers add 6 characters: "%4d │ " (e.g., "   1 │ ")
+// - cursorCol is in ScreenPos coordinates (already includes line number offset)
+// - The viewport transformation handles line number offset calculation
 // - End-of-line: extend line with space, replace with cursor → "Hello█"
 // - Within line: replace existing character with cursor → "He█lo"
 // - Empty line: extend with space, replace with cursor → "█"
 func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLine, themePlugin theme.Theme, cursorCol int) string {
-	// Convert ContentPos to line-content coordinates
+	// ScreenPos coordinates are absolute screen positions, but we need position within line content
+	// Subtract line number offset to get position within the line content
 	adjustedCursorCol := cursorCol
 	if r.config.ShowLineNumbers {
-		adjustedCursorCol = cursorCol - 6 // Subtract line number prefix length
+		adjustedCursorCol -= r.config.LineNumberWidth
 	}
 	
 	// Bounds checking
@@ -498,6 +503,21 @@ func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLin
 	}
 	
 	return r.renderLineWithStyles(lineWithCursor, themePlugin)
+}
+
+// formatLineNumber formats a line number using the appropriate width
+func (r *TerminalRenderer) formatLineNumber(lineNum, totalLines int) string {
+	if !r.config.ShowLineNumbers {
+		return ""
+	}
+	
+	// Calculate digits needed for the total number of lines
+	digits := len(fmt.Sprintf("%d", totalLines))
+	
+	// Create format string: "%Nd │ " where N is the digit count
+	formatStr := fmt.Sprintf("%%%dd │ ", digits)
+	
+	return fmt.Sprintf(formatStr, lineNum)
 }
 
 // renderLineWithStyles applies styles to a line

@@ -59,6 +59,9 @@ type RendererConfig struct {
 	// Show line numbers
 	ShowLineNumbers bool
 	
+	// Width of line number prefix (calculated dynamically)
+	LineNumberWidth int
+	
 	// Preview mode settings
 	PreviewMode bool
 	

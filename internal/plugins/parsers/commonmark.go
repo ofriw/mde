@@ -82,10 +82,9 @@ func (p *CommonMarkParser) Parse(ctx context.Context, text string) (*mdeAST.Docu
 	return doc, nil
 }
 
-// ParseIncremental parses only changed sections for efficiency
+// ParseIncremental parses only changed sections for efficiency.
+// Currently performs full reparse for simplicity and correctness.
 func (p *CommonMarkParser) ParseIncremental(ctx context.Context, doc *mdeAST.Document, changes []mdeAST.Change) error {
-	// For now, we'll do a full reparse
-	// TODO: Implement true incremental parsing later for performance
 	_, err := p.Parse(ctx, doc.GetText())
 	return err
 }
