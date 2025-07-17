@@ -3,6 +3,7 @@ package ast
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -150,9 +151,16 @@ func (e *Editor) FormatLineNumber(lineNum int) string {
 
 // LoadFile loads a file into the editor
 func (e *Editor) LoadFile(filename string) error {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("failed to read file %s: %w", filename, err)
+	var content []byte
+	
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		content = []byte{}
+	} else {
+		var err error
+		content, err = ioutil.ReadFile(filename)
+		if err != nil {
+			return fmt.Errorf("failed to read file %s: %w", filename, err)
+		}
 	}
 	
 	e.document = NewDocument(string(content))
