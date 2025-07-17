@@ -3,6 +3,10 @@
 
 Cursor management is broken with visual artifacts and incorrect positioning. Need comprehensive TUI test suite to reliably test cursor behavior and prevent regressions.
 
+## Related Tickets
+- **Enables**: `tickets/closed/006-themes-documentation.md` - Testing framework enables theme cursor validation
+- **Superseded by**: `tickets/010-coordinate-system-architecture-refactor.md` - Architectural fix addresses root cause
+
 ## Current Issues
 
 ### Cursor Management Problems

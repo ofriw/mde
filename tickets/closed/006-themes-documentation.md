@@ -3,6 +3,10 @@
 
 Implement theme system and complete documentation for release.
 
+## Related Tickets
+- **Blocked by**: `tickets/closed/008-cursor-management-testing.md` - Cursor testing needed for theme cursor rendering
+- **Depends on**: `tickets/010-coordinate-system-architecture-refactor.md` - Coordinate system affects cursor styling
+
 ## Deliverables
 - Light and dark themes
 - Theme switching functionality
