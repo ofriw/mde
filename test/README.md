@@ -25,7 +25,7 @@ Critical regression tests for cursor positioning and TUI behavior validation.
 ### ✅ VERIFY: Test Validation Required
 - Cursor position (0,0) after file load
 - Content length preservation in rendering
-- Line number offset calculation (6 characters)
+- Line number offset calculation (viewport configuration)
 - Cursor visibility in TUI output
 
 ### 🔍 VALIDATE: User Confirmation Needed For
@@ -44,12 +44,12 @@ Comprehensive testing framework for the MDE markdown editor, with focus on curso
 test/
 ├── unit/                           # Unit tests for core functionality
 │   ├── cursor_test.go              # Core cursor logic tests (16 tests)
-│   ├── coordinate_test.go          # Coordinate transformation tests (9 tests)
-│   └── cursor_invariants_test.go   # Property-based cursor invariant tests (8 tests)
+│   ├── coordinate_system_test.go   # BufferPos and viewport transformation tests
+│   └── cursor_rendering_test.go    # Cursor rendering and visual positioning tests
 ├── integration/                    # Integration tests
-│   ├── viewport_test.go            # Viewport and cursor synchronization tests (7 tests)
 │   ├── performance_test.go         # Performance benchmarks and tests (7 tests + 3 benchmarks)
 │   ├── tui_cursor_test.go          # TUI cursor integration tests (8 tests)
+│   ├── cursor_fixes_test.go        # Cursor positioning regression tests
 │   ├── plugin_test.go              # Plugin integration tests (existing)
 │   ├── builtin_plugins_test.go     # Built-in plugin tests (existing)
 │   └── real_world_test.go          # Real-world scenario tests (existing)
@@ -66,8 +66,8 @@ test/
 
 ### 1. Comprehensive Unit Testing
 - **cursor_test.go**: Tests all cursor movement operations, selection handling, and edge cases
-- **coordinate_test.go**: Tests screen position calculation and mouse coordinate transformation
-- **cursor_invariants_test.go**: Property-based tests ensuring cursor invariants are maintained
+- **coordinate_system_test.go**: Tests BufferPos validation and viewport coordinate transformation
+- **cursor_rendering_test.go**: Tests cursor rendering and visual positioning
 
 ### 2. TUI Integration Framework
 - **teatest Integration**: Uses `github.com/charmbracelet/x/exp/teatest` for deterministic TUI testing
@@ -79,10 +79,11 @@ test/
 - **Large Document Testing**: Tests with 10k+ lines
 - **Memory Usage**: Concurrent access and memory leak detection
 
-### 4. Viewport Testing
-- **Coordinate Transformation**: Tests the buggy mouse-to-cursor coordinate transformation
+### 4. Coordinate System Testing
+- **BufferPos Validation**: Tests buffer position validation and bounds checking
+- **Viewport Transformation**: Tests BufferPos → ScreenPos coordinate transformation
 - **Edge Cases**: Boundary conditions, Unicode content, line number handling
-- **Round-trip Validation**: Ensures document ↔ screen coordinate consistency
+- **Visibility Checks**: Ensures positions are correctly marked as visible/invisible
 
 ## Running Tests
 
@@ -92,7 +93,7 @@ go test ./test/unit/... -v
 
 # Run specific test categories
 go test ./test/unit/cursor_test.go -v
-go test ./test/integration/viewport_test.go -v
+go test ./test/unit/coordinate_system_test.go -v
 go test ./test/integration/performance_test.go -v
 
 # Run benchmarks
@@ -116,8 +117,8 @@ go test ./test/unit/cursor_test.go -run TestCursor_MoveLeft -v
 - **Property-based**: Invariant testing with random inputs
 
 ### Integration Tests (22 tests)
-- **Viewport Synchronization**: Cursor/viewport coordination
-- **Mouse Handling**: Click coordinate transformation
+- **Cursor Positioning**: CursorManager integration and coordinate transformation
+- **Mouse Handling**: Click coordinate transformation using new coordinate system
 - **Performance**: Movement speed, memory usage, concurrent access
 - **TUI Integration**: Full TUI testing with teatest framework
 - **Visual Artifacts**: Detection of cursor rendering issues
@@ -150,10 +151,10 @@ Visual testing and artifact detection:
 ## Issues Addressed
 
 This test suite specifically addresses the cursor management issues identified in:
-- `internal/tui/model.go:540` - GetCursorScreenPosition() edge cases
 - `internal/tui/model.go:197-212` - Cursor rendering artifacts in fallback mode
 - `internal/tui/update.go:344-400` - Mouse click coordinate transformation bugs
-- `pkg/ast/cursor.go` - Missing validation for edge cases
+- `pkg/ast/cursor.go` - BufferPos validation and coordinate transformation
+- `pkg/ast/viewport.go` - Viewport coordinate transformation edge cases
 
 ## Future Enhancements
 
@@ -167,9 +168,9 @@ This test suite specifically addresses the cursor management issues identified i
 
 When adding new cursor-related features:
 1. Add unit tests to `test/unit/cursor_test.go`
-2. Add coordinate transformation tests to `test/unit/coordinate_test.go`
-3. Add integration tests to `test/integration/viewport_test.go`
+2. Add coordinate transformation tests to `test/unit/coordinate_system_test.go`
+3. Add integration tests to `test/integration/cursor_fixes_test.go` or `test/integration/tui_cursor_test.go`
 4. Add performance benchmarks if needed
-5. Update property-based tests for new invariants
+5. Update CursorManager tests for new functionality
 
 All tests should pass individually and the test suite should maintain high coverage of cursor-related functionality.

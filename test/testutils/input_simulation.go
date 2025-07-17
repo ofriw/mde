@@ -251,7 +251,7 @@ type TestStep struct {
 
 // ExpectedState represents the expected state after a test scenario
 type ExpectedState struct {
-	CursorPosition ast.Position
+	CursorPosition ast.BufferPos
 	ScreenPosition struct{ Row, Col int }
 	Selection      *ast.Selection
 	Content        string

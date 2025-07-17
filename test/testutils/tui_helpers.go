@@ -24,22 +24,22 @@ func LoadContentIntoModel(model *tui.Model, content string) {
 	// Clear existing content and insert new content
 	// This is a simplified approach - in practice, you'd want a proper SetContent method
 	cursor := modelEditor.GetCursor()
-	cursor.SetPosition(ast.Position{Line: 0, Col: 0})
+	cursor.SetBufferPos(ast.BufferPos{Line: 0, Col: 0})
 	
 	// Insert the content character by character
 	for _, char := range content {
 		if char == '\n' {
-			doc.InsertNewline(cursor.GetPosition())
-			cursor.MoveDown()
-			cursor.MoveToLineStart()
+			doc.InsertNewline(cursor.GetBufferPos())
+			modelEditor.MoveCursorDown()
+			modelEditor.MoveCursorToLineStart()
 		} else {
-			newPos := doc.InsertChar(cursor.GetPosition(), char)
-			cursor.SetPosition(newPos)
+			newPos := doc.InsertChar(cursor.GetBufferPos(), char)
+			cursor.SetBufferPos(newPos)
 		}
 	}
 	
 	// Move cursor back to start
-	cursor.MoveToDocumentStart()
+	modelEditor.MoveCursorToDocumentStart()
 }
 
 // SetModelSize sets the size of the TUI model

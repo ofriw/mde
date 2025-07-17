@@ -36,23 +36,27 @@ func NewCursorTestHelper(t *testing.T, content string, width, height int) *Curso
 }
 
 // GetCursorPosition returns the current cursor position in the document
-func (h *CursorTestHelper) GetCursorPosition() ast.Position {
-	return h.model.GetEditor().GetCursor().GetPosition()
+func (h *CursorTestHelper) GetCursorPosition() ast.BufferPos {
+	return h.model.GetEditor().GetCursor().GetBufferPos()
 }
 
 // SetCursorPosition sets the cursor to a specific position
-func (h *CursorTestHelper) SetCursorPosition(pos ast.Position) {
-	h.model.GetEditor().GetCursor().SetPosition(pos)
+func (h *CursorTestHelper) SetCursorPosition(pos ast.BufferPos) {
+	h.model.GetEditor().GetCursor().SetBufferPos(pos)
 }
 
 // GetScreenPosition returns the screen position of the cursor
 func (h *CursorTestHelper) GetScreenPosition() (int, int) {
-	return h.model.GetEditor().GetCursorScreenPosition()
+	screenPos, err := h.model.GetEditor().GetCursor().GetScreenPos()
+	if err != nil {
+		return -1, -1  // Cursor not visible
+	}
+	return screenPos.Row, screenPos.Col
 }
 
 // GetViewPort returns the current viewport
-func (h *CursorTestHelper) GetViewPort() ast.ViewPort {
-	return h.model.GetEditor().GetViewPort()
+func (h *CursorTestHelper) GetViewPort() *ast.Viewport {
+	return h.model.GetEditor().GetViewport()
 }
 
 // SendKey sends a key press to the model
@@ -111,7 +115,7 @@ func (h *CursorTestHelper) SendMouseDrag(x, y int) {
 }
 
 // AssertCursorPosition asserts that the cursor is at the expected position
-func (h *CursorTestHelper) AssertCursorPosition(expected ast.Position) {
+func (h *CursorTestHelper) AssertCursorPosition(expected ast.BufferPos) {
 	actual := h.GetCursorPosition()
 	assert.Equal(h.t, expected, actual, "Cursor position mismatch")
 }
@@ -128,10 +132,10 @@ func (h *CursorTestHelper) AssertCursorVisible() {
 	pos := h.GetCursorPosition()
 	viewport := h.GetViewPort()
 	
-	assert.True(h.t, pos.Line >= viewport.Top, "Cursor line should be >= viewport top")
-	assert.True(h.t, pos.Line < viewport.Top+viewport.Height, "Cursor line should be < viewport bottom")
-	assert.True(h.t, pos.Col >= viewport.Left, "Cursor column should be >= viewport left")
-	assert.True(h.t, pos.Col < viewport.Left+viewport.Width, "Cursor column should be < viewport right")
+	assert.True(h.t, pos.Line >= viewport.GetTopLine(), "Cursor line should be >= viewport top")
+	assert.True(h.t, pos.Line < viewport.GetTopLine()+viewport.GetHeight(), "Cursor line should be < viewport bottom")
+	assert.True(h.t, pos.Col >= viewport.GetLeftColumn(), "Cursor column should be >= viewport left")
+	assert.True(h.t, pos.Col < viewport.GetLeftColumn()+viewport.GetWidth(), "Cursor column should be < viewport right")
 }
 
 // RunTUITest runs a TUI test with teatest framework
@@ -162,7 +166,7 @@ func (h *CursorTestHelper) HasSelection() bool {
 
 // GetSelectionText returns the selected text
 func (h *CursorTestHelper) GetSelectionText() string {
-	return h.model.GetEditor().GetCursor().GetSelectionText()
+	return h.model.GetEditor().GetSelectionText()
 }
 
 // SimulateTyping simulates typing a string character by character
@@ -188,7 +192,7 @@ func (h *CursorTestHelper) FormatCursorState() string {
 	return fmt.Sprintf(
 		"Cursor: doc(%d,%d) screen(%d,%d) viewport(top=%d,left=%d,w=%d,h=%d)",
 		pos.Line, pos.Col, screenRow, screenCol,
-		viewport.Top, viewport.Left, viewport.Width, viewport.Height,
+		viewport.GetTopLine(), viewport.GetLeftColumn(), viewport.GetWidth(), viewport.GetHeight(),
 	)
 }
 
