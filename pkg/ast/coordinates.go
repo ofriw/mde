@@ -1,72 +1,53 @@
-// Package ast defines coordinate types and transformation interfaces for the MDE editor.
+// Package ast defines the coordinate system for the MDE editor.
 //
-// COORDINATE SYSTEMS:
+// QUICK REFERENCE:
 //
-// This editor uses 3 distinct coordinate systems to prevent confusion:
+// WHAT: Single BufferPos type for all operations
+// WHY: Eliminates transformation bugs and synchronization issues  
+// HOW: BufferPos → Viewport → ScreenPos (unidirectional)
 //
-// 1. DocumentPos - Position in the raw document content (0-indexed)
-//    - Line: Line number in the document
-//    - Col: Character position in the line
-//    - Used by: Cursor, Document, Edit operations
+// USAGE PATTERNS:
+//   pos := BufferPos{Line: 0, Col: 5}           // Document position
+//   screenPos, err := viewport.BufferToScreen(pos) // Transform to screen
+//   if err == ErrPositionNotVisible { ... }     // Handle invisible positions
 //
-// 2. ContentPos - Position in rendered content area (includes line number offset)
-//    - Line: Line number in the viewport
-//    - Col: Character position including line number prefix (if enabled)
-//    - Used by: Renderer input, TUI display
+// COMMON OPERATIONS:
+//   ✅ cursor.SetBufferPos(BufferPos{Line: 10, Col: 0})
+//   ✅ screenPos, err := viewport.BufferToScreen(cursor.GetBufferPos())
+//   ❌ screenPos := ScreenPos{Row: 10, Col: 0} // Wrong - use viewport
 //
-// 3. ScreenPos - Absolute position on terminal screen
-//    - Row: Terminal row (including status bar, etc.)
-//    - Col: Terminal column
-//    - Used by: Terminal output, mouse events
-//
-// TRANSFORMATION CHAIN:
-// DocumentPos → ContentPos → ScreenPos
-//
-// CRITICAL INVARIANT:
-// Each transformation happens exactly once in exactly one component.
-// Editor owns DocumentPos→ContentPos, TUI owns ContentPos→ScreenPos.
+// CONSTRAINTS:
+//   1. Only BufferPos is authoritative - never create ScreenPos directly
+//   2. Always validate: validator.ValidateBufferPos(pos)
+//   3. Handle ErrPositionNotVisible when converting to screen coordinates
+//   4. Viewport is immutable - create new instances for changes
 package ast
 
 import (
 	"fmt"
 )
 
-// DocumentPos represents a position in the raw document content.
-// This is the authoritative coordinate system for all edit operations.
-type DocumentPos struct {
+// BufferPos represents a position in the document buffer.
+// AUTHORITATIVE: This is the single source of truth for all positions.
+// USAGE: pos := BufferPos{Line: 0, Col: 5} // Line 1, character 6
+type BufferPos struct {
 	Line int // 0-indexed line number in document
 	Col  int // 0-indexed column position in line
 }
 
-// String returns a human-readable representation of the document position.
-func (p DocumentPos) String() string {
-	return fmt.Sprintf("DocumentPos{Line:%d, Col:%d}", p.Line, p.Col)
+// String returns a human-readable representation of the buffer position.
+func (p BufferPos) String() string {
+	return fmt.Sprintf("BufferPos{Line:%d, Col:%d}", p.Line, p.Col)
 }
 
 // IsValid returns true if the position has non-negative coordinates.
-func (p DocumentPos) IsValid() bool {
+func (p BufferPos) IsValid() bool {
 	return p.Line >= 0 && p.Col >= 0
 }
 
-// ContentPos represents a position in the rendered content area.
-// This includes viewport offset and line number prefix offset.
-type ContentPos struct {
-	Line int // 0-indexed line number in viewport
-	Col  int // 0-indexed column position including line number prefix
-}
-
-// String returns a human-readable representation of the content position.
-func (p ContentPos) String() string {
-	return fmt.Sprintf("ContentPos{Line:%d, Col:%d}", p.Line, p.Col)
-}
-
-// IsValid returns true if the position has non-negative coordinates.
-func (p ContentPos) IsValid() bool {
-	return p.Line >= 0 && p.Col >= 0
-}
-
-// ScreenPos represents an absolute position on the terminal screen.
-// This includes all UI elements (status bar, help bar, etc.).
+// ScreenPos represents a position on the terminal screen.
+// DERIVED: Always computed from BufferPos via viewport.BufferToScreen()
+// NEVER create directly - use viewport transformation
 type ScreenPos struct {
 	Row int // 0-indexed row on terminal screen
 	Col int // 0-indexed column on terminal screen
@@ -82,52 +63,9 @@ func (p ScreenPos) IsValid() bool {
 	return p.Row >= 0 && p.Col >= 0
 }
 
-// ViewportInfo provides debugging information about the current viewport state.
-// This is essential for LLM troubleshooting of coordinate transformations.
-type ViewportInfo struct {
-	Top         int  // First visible document line
-	Left        int  // First visible document column
-	Width       int  // Viewport width in characters
-	Height      int  // Viewport height in lines
-	LineNumbers bool // Whether line numbers are enabled
-}
-
-// String returns a human-readable representation of the viewport info.
-func (v ViewportInfo) String() string {
-	return fmt.Sprintf("ViewportInfo{Top:%d, Left:%d, Width:%d, Height:%d, LineNumbers:%t}",
-		v.Top, v.Left, v.Width, v.Height, v.LineNumbers)
-}
-
-// CoordinateTransformer handles the transformation from document coordinates
-// to content coordinates. This transformation includes viewport offset and
-// line number offset.
-type CoordinateTransformer interface {
-	// TransformDocumentToContent converts document coordinates to content coordinates.
-	// This transformation includes:
-	// 1. Viewport offset (subtract viewport top/left)
-	// 2. Line number offset (add 6 characters if line numbers enabled)
-	TransformDocumentToContent(docPos DocumentPos) ContentPos
-	
-	// GetViewportInfo returns current viewport state for debugging.
-	// This is essential for LLM troubleshooting of coordinate issues.
-	GetViewportInfo() ViewportInfo
-}
-
-// CoordinateValidator validates coordinate positions against document bounds.
-// This prevents coordinate system violations and provides clear error messages.
-type CoordinateValidator interface {
-	// ValidateDocumentPos checks if a document position is within bounds.
-	// Returns error with clear message if position is invalid.
-	ValidateDocumentPos(pos DocumentPos) error
-	
-	// ValidateContentPos checks if a content position is within bounds.
-	// Returns error with clear message if position is invalid.
-	ValidateContentPos(pos ContentPos) error
-}
-
 // CoordinateError represents an error in coordinate validation or transformation.
 type CoordinateError struct {
-	Type     string // "document", "content", or "screen"
+	Type     string // "buffer" or "screen"
 	Position string // String representation of the position
 	Reason   string // Human-readable reason for the error
 }
@@ -137,20 +75,36 @@ func (e CoordinateError) Error() string {
 	return fmt.Sprintf("coordinate error in %s position %s: %s", e.Type, e.Position, e.Reason)
 }
 
-// NewDocumentCoordinateError creates a coordinate error for document positions.
-func NewDocumentCoordinateError(pos DocumentPos, reason string) CoordinateError {
+// NewBufferCoordinateError creates a coordinate error for buffer positions.
+func NewBufferCoordinateError(pos BufferPos, reason string) CoordinateError {
 	return CoordinateError{
-		Type:     "document",
+		Type:     "buffer",
 		Position: pos.String(),
 		Reason:   reason,
 	}
 }
 
-// NewContentCoordinateError creates a coordinate error for content positions.
-func NewContentCoordinateError(pos ContentPos, reason string) CoordinateError {
+// NewScreenCoordinateError creates a coordinate error for screen positions.
+func NewScreenCoordinateError(pos ScreenPos, reason string) CoordinateError {
 	return CoordinateError{
-		Type:     "content",
+		Type:     "screen",
 		Position: pos.String(),
 		Reason:   reason,
 	}
+}
+
+// ErrPositionNotVisible is returned when a buffer position is not visible in the viewport.
+// COMMON: Check for this error when converting BufferPos to ScreenPos
+// USAGE: if err == ErrPositionNotVisible { /* cursor off-screen */ }
+var ErrPositionNotVisible = CoordinateError{
+	Type:     "buffer",
+	Position: "",
+	Reason:   "position not visible in current viewport",
+}
+
+// PositionValidator validates buffer positions against document bounds.
+type PositionValidator interface {
+	// ValidateBufferPos checks if a buffer position is within document bounds.
+	// Returns error with clear message if position is invalid.
+	ValidateBufferPos(pos BufferPos) error
 }
