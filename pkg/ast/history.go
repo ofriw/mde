@@ -14,7 +14,7 @@ const (
 // Change represents a single change to the document
 type Change struct {
 	Type      ChangeType
-	Position  Position
+	BufferPos  BufferPos
 	OldText   string
 	NewText   string
 	Timestamp time.Time
@@ -23,7 +23,7 @@ type Change struct {
 // HistoryEntry represents a group of changes that can be undone/redone together
 type HistoryEntry struct {
 	Changes []Change
-	Cursor  Position
+	Cursor  BufferPos
 }
 
 // History manages the undo/redo stack for a document
@@ -50,7 +50,7 @@ func NewHistory(maxEntries int) *History {
 }
 
 // AddChange adds a change to the history
-func (h *History) AddChange(change Change, cursor Position) {
+func (h *History) AddChange(change Change, cursor BufferPos) {
 	// Start a new group if not already grouping
 	if !h.grouping {
 		h.startGroup(cursor)
@@ -65,7 +65,7 @@ func (h *History) AddChange(change Change, cursor Position) {
 }
 
 // startGroup starts a new change group
-func (h *History) startGroup(cursor Position) {
+func (h *History) startGroup(cursor BufferPos) {
 	h.grouping = true
 	h.tempEntry = &HistoryEntry{
 		Changes: make([]Change, 0),
@@ -173,7 +173,7 @@ func ApplyChange(doc *Document, change Change) {
 	switch change.Type {
 	case ChangeInsert:
 		// Insert text at position
-		pos := change.Position
+		pos := change.BufferPos
 		for _, ch := range change.NewText {
 			if ch == '\n' {
 				pos = doc.InsertNewline(pos)
@@ -184,7 +184,7 @@ func ApplyChange(doc *Document, change Change) {
 		
 	case ChangeDelete:
 		// Delete text from position
-		pos := change.Position
+		pos := change.BufferPos
 		for range change.OldText {
 			if pos.Col > 0 {
 				pos = doc.DeleteChar(pos)
@@ -195,7 +195,7 @@ func ApplyChange(doc *Document, change Change) {
 		
 	case ChangeReplace:
 		// Delete old text and insert new text
-		pos := change.Position
+		pos := change.BufferPos
 		
 		// Delete old text
 		for range change.OldText {
@@ -220,7 +220,7 @@ func ApplyChange(doc *Document, change Change) {
 // ReverseChange creates the reverse of a change for undo
 func ReverseChange(change Change) Change {
 	reversed := Change{
-		Position:  change.Position,
+		BufferPos:  change.BufferPos,
 		Timestamp: time.Now(),
 	}
 	

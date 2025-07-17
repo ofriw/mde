@@ -75,17 +75,8 @@ func (t Token) Kind() TokenKind {
 	return t.kind
 }
 
-// Position represents a cursor position in the document
-type Position struct {
-	Line int
-	Col  int
-}
 
-// Selection represents a text selection range
-type Selection struct {
-	Start Position
-	End   Position
-}
+// Selection is defined in cursor.go as part of the CursorManager architecture
 
 // NewDocument creates a new document with initial content
 func NewDocument(content string) *Document {
@@ -133,7 +124,7 @@ func (d *Document) GetLineLength(lineNum int) int {
 }
 
 // InsertChar inserts a character at the specified position
-func (d *Document) InsertChar(pos Position, ch rune) Position {
+func (d *Document) InsertChar(pos BufferPos, ch rune) BufferPos {
 	if pos.Line < 0 || pos.Line >= len(d.lines) {
 		return pos
 	}
@@ -158,11 +149,11 @@ func (d *Document) InsertChar(pos Position, ch rune) Position {
 	line.length = len(newRunes)
 	d.modified = true
 	
-	return Position{Line: pos.Line, Col: pos.Col + 1}
+	return BufferPos{Line: pos.Line, Col: pos.Col + 1}
 }
 
 // DeleteChar deletes a character at the specified position
-func (d *Document) DeleteChar(pos Position) Position {
+func (d *Document) DeleteChar(pos BufferPos) BufferPos {
 	if pos.Line < 0 || pos.Line >= len(d.lines) {
 		return pos
 	}
@@ -183,11 +174,11 @@ func (d *Document) DeleteChar(pos Position) Position {
 	line.length = len(newRunes)
 	d.modified = true
 	
-	return Position{Line: pos.Line, Col: pos.Col - 1}
+	return BufferPos{Line: pos.Line, Col: pos.Col - 1}
 }
 
 // InsertNewline inserts a newline at the specified position
-func (d *Document) InsertNewline(pos Position) Position {
+func (d *Document) InsertNewline(pos BufferPos) BufferPos {
 	if pos.Line < 0 || pos.Line >= len(d.lines) {
 		return pos
 	}
@@ -224,11 +215,11 @@ func (d *Document) InsertNewline(pos Position) Position {
 	d.lines = newLines
 	d.modified = true
 	
-	return Position{Line: pos.Line + 1, Col: 0}
+	return BufferPos{Line: pos.Line + 1, Col: 0}
 }
 
 // DeleteLine deletes a line and merges with previous if needed
-func (d *Document) DeleteLine(pos Position) Position {
+func (d *Document) DeleteLine(pos BufferPos) BufferPos {
 	if pos.Line <= 0 || pos.Line >= len(d.lines) {
 		return pos
 	}
@@ -250,7 +241,7 @@ func (d *Document) DeleteLine(pos Position) Position {
 	d.lines = newLines
 	d.modified = true
 	
-	return Position{Line: pos.Line - 1, Col: newCol}
+	return BufferPos{Line: pos.Line - 1, Col: newCol}
 }
 
 // GetText returns the full text content of the document
@@ -283,7 +274,7 @@ func (d *Document) ClearModified() {
 }
 
 // ValidatePosition ensures a position is within document bounds
-func (d *Document) ValidatePosition(pos Position) Position {
+func (d *Document) ValidatePosition(pos BufferPos) BufferPos {
 	if pos.Line < 0 {
 		pos.Line = 0
 	} else if pos.Line >= len(d.lines) {
@@ -300,8 +291,28 @@ func (d *Document) ValidatePosition(pos Position) Position {
 	return pos
 }
 
+// ValidateBufferPos implements PositionValidator interface
+func (d *Document) ValidateBufferPos(pos BufferPos) error {
+	if pos.Line < 0 {
+		return NewBufferCoordinateError(pos, "line number cannot be negative")
+	}
+	if pos.Line >= len(d.lines) {
+		return NewBufferCoordinateError(pos, "line number exceeds document length")
+	}
+	if pos.Col < 0 {
+		return NewBufferCoordinateError(pos, "column number cannot be negative")
+	}
+	
+	lineLength := d.GetLineLength(pos.Line)
+	if pos.Col > lineLength {
+		return NewBufferCoordinateError(pos, "column number exceeds line length")
+	}
+	
+	return nil
+}
+
 // GetCharAt returns the character at the specified position
-func (d *Document) GetCharAt(pos Position) rune {
+func (d *Document) GetCharAt(pos BufferPos) rune {
 	if pos.Line < 0 || pos.Line >= len(d.lines) {
 		return 0
 	}
@@ -335,7 +346,7 @@ func (d *Document) GetLineTokens(lineNum int) []Token {
 }
 
 // FindWordStart finds the start of the word at the given position
-func (d *Document) FindWordStart(pos Position) Position {
+func (d *Document) FindWordStart(pos BufferPos) BufferPos {
 	if pos.Line < 0 || pos.Line >= len(d.lines) {
 		return pos
 	}
@@ -344,7 +355,7 @@ func (d *Document) FindWordStart(pos Position) Position {
 	runes := []rune(line.text)
 	
 	if pos.Col <= 0 {
-		return Position{Line: pos.Line, Col: 0}
+		return BufferPos{Line: pos.Line, Col: 0}
 	}
 	
 	col := pos.Col
@@ -357,11 +368,11 @@ func (d *Document) FindWordStart(pos Position) Position {
 		col--
 	}
 	
-	return Position{Line: pos.Line, Col: col}
+	return BufferPos{Line: pos.Line, Col: col}
 }
 
 // FindWordEnd finds the end of the word at the given position
-func (d *Document) FindWordEnd(pos Position) Position {
+func (d *Document) FindWordEnd(pos BufferPos) BufferPos {
 	if pos.Line < 0 || pos.Line >= len(d.lines) {
 		return pos
 	}
@@ -379,5 +390,215 @@ func (d *Document) FindWordEnd(pos Position) Position {
 		col++
 	}
 	
-	return Position{Line: pos.Line, Col: col}
+	return BufferPos{Line: pos.Line, Col: col}
+}
+
+// ============================================================================
+// CURSOR MOVEMENT METHODS
+// ============================================================================
+//
+// ARCHITECTURAL DESIGN:
+// Following modern text editor best practices (CodeMirror 6, Xi-editor research),
+// cursor movement logic resides in the Document since it requires content-aware
+// operations. The Document knows its structure and can make informed decisions
+// about cursor positioning.
+//
+// DESIGN PRINCIPLES:
+// 1. Document-Centric: Content-aware operations belong with content
+// 2. Pure Functions: Movement methods return new positions without side effects
+// 3. Bounds Checking: All methods ensure positions remain within document bounds
+// 4. Desired Column: Vertical movement preserves intended column position
+// 5. Unicode Aware: Proper handling of multi-byte characters
+//
+// SOURCES:
+// - CodeMirror 6 architecture: https://codemirror.net/docs/ref
+// - Xi-editor retrospective: https://raphlinus.github.io/xi/2020/06/27/xi-retrospective.html
+// - Cursor movement subtleties: https://munificent.github.io/
+//
+// USAGE PATTERN:
+// The Editor calls these methods and updates the CursorManager with the result:
+//   newPos := editor.document.MoveCursorRight(currentPos)
+//   editor.cursorManager.SetBufferPos(newPos)
+
+// MoveCursorRight moves cursor right by one character.
+// Handles line wrapping: moves to start of next line if at end of current line.
+func (d *Document) MoveCursorRight(pos BufferPos) BufferPos {
+	pos = d.ValidatePosition(pos)
+	
+	lineLength := d.GetLineLength(pos.Line)
+	if pos.Col < lineLength {
+		return BufferPos{Line: pos.Line, Col: pos.Col + 1}
+	}
+	
+	if pos.Line < d.LineCount()-1 {
+		return BufferPos{Line: pos.Line + 1, Col: 0}
+	}
+	
+	return pos
+}
+
+// MoveCursorLeft moves cursor left by one character.
+// Handles line wrapping: moves to end of previous line if at start of current line.
+func (d *Document) MoveCursorLeft(pos BufferPos) BufferPos {
+	pos = d.ValidatePosition(pos)
+	
+	if pos.Col > 0 {
+		return BufferPos{Line: pos.Line, Col: pos.Col - 1}
+	}
+	
+	if pos.Line > 0 {
+		prevLine := pos.Line - 1
+		return BufferPos{Line: prevLine, Col: d.GetLineLength(prevLine)}
+	}
+	
+	return pos
+}
+
+// MoveCursorUp moves cursor up by one line with desired column preservation.
+// Returns new position and whether desired column was preserved.
+func (d *Document) MoveCursorUp(pos BufferPos, desiredCol int) (BufferPos, bool) {
+	pos = d.ValidatePosition(pos)
+	
+	if pos.Line <= 0 {
+		return pos, false
+	}
+	
+	newLine := pos.Line - 1
+	lineLength := d.GetLineLength(newLine)
+	
+	newCol := desiredCol
+	if newCol > lineLength {
+		newCol = lineLength
+	}
+	
+	preservedDesired := (newCol == desiredCol)
+	return BufferPos{Line: newLine, Col: newCol}, preservedDesired
+}
+
+// MoveCursorDown moves cursor down by one line with desired column preservation.
+// Returns new position and whether desired column was preserved.
+func (d *Document) MoveCursorDown(pos BufferPos, desiredCol int) (BufferPos, bool) {
+	pos = d.ValidatePosition(pos)
+	
+	if pos.Line >= d.LineCount()-1 {
+		return pos, false
+	}
+	
+	newLine := pos.Line + 1
+	lineLength := d.GetLineLength(newLine)
+	
+	newCol := desiredCol
+	if newCol > lineLength {
+		newCol = lineLength
+	}
+	
+	preservedDesired := (newCol == desiredCol)
+	return BufferPos{Line: newLine, Col: newCol}, preservedDesired
+}
+
+// MoveCursorToLineStart moves cursor to beginning of current line.
+func (d *Document) MoveCursorToLineStart(pos BufferPos) BufferPos {
+	pos = d.ValidatePosition(pos)
+	return BufferPos{Line: pos.Line, Col: 0}
+}
+
+// MoveCursorToLineEnd moves cursor to end of current line.
+func (d *Document) MoveCursorToLineEnd(pos BufferPos) BufferPos {
+	pos = d.ValidatePosition(pos)
+	return BufferPos{Line: pos.Line, Col: d.GetLineLength(pos.Line)}
+}
+
+// MoveCursorToDocumentStart moves cursor to beginning of document.
+func (d *Document) MoveCursorToDocumentStart(pos BufferPos) BufferPos {
+	return BufferPos{Line: 0, Col: 0}
+}
+
+// MoveCursorToDocumentEnd moves cursor to end of document.
+func (d *Document) MoveCursorToDocumentEnd(pos BufferPos) BufferPos {
+	lastLine := d.LineCount() - 1
+	return BufferPos{Line: lastLine, Col: d.GetLineLength(lastLine)}
+}
+
+// MoveCursorWordLeft moves cursor to start of previous word.
+func (d *Document) MoveCursorWordLeft(pos BufferPos) BufferPos {
+	pos = d.ValidatePosition(pos)
+	
+	if pos.Col == 0 {
+		if pos.Line > 0 {
+			prevLine := pos.Line - 1
+			return BufferPos{Line: prevLine, Col: d.GetLineLength(prevLine)}
+		}
+		return pos
+	}
+	
+	return d.FindWordStart(pos)
+}
+
+// MoveCursorWordRight moves cursor to start of next word.
+func (d *Document) MoveCursorWordRight(pos BufferPos) BufferPos {
+	pos = d.ValidatePosition(pos)
+	
+	lineLength := d.GetLineLength(pos.Line)
+	if pos.Col >= lineLength {
+		if pos.Line < d.LineCount()-1 {
+			return BufferPos{Line: pos.Line + 1, Col: 0}
+		}
+		return pos
+	}
+	
+	return d.FindWordEnd(pos)
+}
+
+// GetSelectionText returns the text content of a selection.
+func (d *Document) GetSelectionText(selection *Selection) string {
+	if selection == nil {
+		return ""
+	}
+	
+	start := selection.Start
+	end := selection.End
+	
+	// Normalize selection direction
+	if start.Line > end.Line || (start.Line == end.Line && start.Col > end.Col) {
+		start, end = end, start
+	}
+	
+	start = d.ValidatePosition(start)
+	end = d.ValidatePosition(end)
+	
+	// Single line selection
+	if start.Line == end.Line {
+		line := d.GetLine(start.Line)
+		runes := []rune(line)
+		
+		if start.Col >= len(runes) || end.Col > len(runes) || start.Col >= end.Col {
+			return ""
+		}
+		
+		return string(runes[start.Col:end.Col])
+	}
+	
+	// Multi-line selection
+	var result []string
+	
+	// First line
+	firstLine := d.GetLine(start.Line)
+	firstRunes := []rune(firstLine)
+	if start.Col < len(firstRunes) {
+		result = append(result, string(firstRunes[start.Col:]))
+	}
+	
+	// Middle lines
+	for i := start.Line + 1; i < end.Line; i++ {
+		result = append(result, d.GetLine(i))
+	}
+	
+	// Last line
+	lastLine := d.GetLine(end.Line)
+	lastRunes := []rune(lastLine)
+	if end.Col <= len(lastRunes) {
+		result = append(result, string(lastRunes[:end.Col]))
+	}
+	
+	return strings.Join(result, "\n")
 }

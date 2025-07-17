@@ -1,225 +1,173 @@
+// Package ast defines the cursor state management system.
+//
+// CURSOR MANAGER QUICK REFERENCE:
+//
+// WHAT: Manages cursor position and selection state
+// WHERE: Position logic in CursorManager, movement logic in Document
+// HOW: Use BufferPos for all position operations
+//
+// COMMON OPERATIONS:
+//   ✅ cursor.SetBufferPos(BufferPos{Line: 10, Col: 0})
+//   ✅ pos := cursor.GetBufferPos()
+//   ✅ screenPos, err := cursor.GetScreenPos()
+//   ✅ cursor.StartSelection(); cursor.ExtendSelection()
+//   ❌ cursor.SetScreenPos(...) // Wrong - use BufferPos only
+//
+// MOVEMENT PATTERN:
+//   1. Editor calls Document.MoveCursorRight() → returns new BufferPos
+//   2. Editor calls cursor.SetBufferPos(newPos) → updates cursor state
+//   3. CursorManager validates position and updates desired column
+//
+// SELECTION PATTERN:
+//   cursor.StartSelection()    // Begin selection at current position
+//   cursor.ExtendSelection()   // Extend to current position after movement
+//   text := editor.GetSelectionText() // Get selected text
+//
+// COORDINATE TRANSFORMATION:
+//   screenPos, err := cursor.GetScreenPos()
+//   if err == ErrPositionNotVisible { /* handle off-screen cursor */ }
 package ast
 
-import "strings"
 
-// Cursor manages cursor position and movement within a document
-type Cursor struct {
-	pos       Position
-	document  *Document
-	selection *Selection
-	desired   int // Desired column for vertical movement
+// Selection represents a text selection range using BufferPos.
+type Selection struct {
+	Start BufferPos
+	End   BufferPos
 }
 
-// NewCursor creates a new cursor for the given document
-func NewCursor(doc *Document) *Cursor {
-	return &Cursor{
-		pos:      Position{Line: 0, Col: 0},
-		document: doc,
-		desired:  0,
+// CursorManager manages cursor position state and coordinate transformations.
+// DOES: Position state, coordinate transforms, selection management
+// DOES NOT: Cursor movement logic (Document handles this)
+type CursorManager struct {
+	bufferPos   BufferPos          // Authoritative cursor position
+	viewport    *Viewport          // Immutable viewport configuration
+	validator   PositionValidator  // Bounds checking
+	selection   *Selection         // Current selection (nil if none)
+	desired     int                // Desired column for vertical movement
+}
+
+// NewCursorManager creates a new cursor manager with the given components.
+// The validator is typically a Document that implements PositionValidator.
+func NewCursorManager(viewport *Viewport, validator PositionValidator) *CursorManager {
+	return &CursorManager{
+		bufferPos: BufferPos{Line: 0, Col: 0},
+		viewport:  viewport,
+		validator: validator,
+		desired:   0,
 	}
 }
 
-// GetPosition returns the current cursor position
-func (c *Cursor) GetPosition() Position {
-	return c.pos
+// GetBufferPos returns the current cursor position in buffer coordinates.
+func (c *CursorManager) GetBufferPos() BufferPos {
+	return c.bufferPos
 }
 
-// SetPosition sets the cursor position
-func (c *Cursor) SetPosition(pos Position) {
-	c.pos = c.document.ValidatePosition(pos)
-	c.desired = c.pos.Col
+// GetScreenPos returns the current cursor position in screen coordinates.
+// Returns error if position is not visible in current viewport.
+func (c *CursorManager) GetScreenPos() (ScreenPos, error) {
+	return c.viewport.BufferToScreen(c.bufferPos)
 }
 
-// MoveLeft moves cursor left by one character
-func (c *Cursor) MoveLeft() {
-	if c.pos.Col > 0 {
-		c.pos.Col--
-	} else if c.pos.Line > 0 {
-		c.pos.Line--
-		c.pos.Col = c.document.GetLineLength(c.pos.Line)
-	}
-	c.desired = c.pos.Col
-}
-
-// MoveRight moves cursor right by one character
-func (c *Cursor) MoveRight() {
-	lineLength := c.document.GetLineLength(c.pos.Line)
-	if c.pos.Col < lineLength {
-		c.pos.Col++
-	} else if c.pos.Line < c.document.LineCount()-1 {
-		c.pos.Line++
-		c.pos.Col = 0
-	}
-	c.desired = c.pos.Col
-}
-
-// MoveUp moves cursor up by one line
-func (c *Cursor) MoveUp() {
-	if c.pos.Line > 0 {
-		c.pos.Line--
-		c.pos.Col = c.desired
-		lineLength := c.document.GetLineLength(c.pos.Line)
-		if c.pos.Col > lineLength {
-			c.pos.Col = lineLength
-		}
-	}
-}
-
-// MoveDown moves cursor down by one line
-func (c *Cursor) MoveDown() {
-	if c.pos.Line < c.document.LineCount()-1 {
-		c.pos.Line++
-		c.pos.Col = c.desired
-		lineLength := c.document.GetLineLength(c.pos.Line)
-		if c.pos.Col > lineLength {
-			c.pos.Col = lineLength
-		}
-	}
-}
-
-// MoveToLineStart moves cursor to beginning of current line
-func (c *Cursor) MoveToLineStart() {
-	c.pos.Col = 0
-	c.desired = 0
-}
-
-// MoveToLineEnd moves cursor to end of current line
-func (c *Cursor) MoveToLineEnd() {
-	c.pos.Col = c.document.GetLineLength(c.pos.Line)
-	c.desired = c.pos.Col
-}
-
-// MoveToDocumentStart moves cursor to beginning of document
-func (c *Cursor) MoveToDocumentStart() {
-	c.pos = Position{Line: 0, Col: 0}
-	c.desired = 0
-}
-
-// MoveToDocumentEnd moves cursor to end of document
-func (c *Cursor) MoveToDocumentEnd() {
-	c.pos.Line = c.document.LineCount() - 1
-	c.pos.Col = c.document.GetLineLength(c.pos.Line)
-	c.desired = c.pos.Col
-}
-
-// MoveWordLeft moves cursor to start of previous word
-func (c *Cursor) MoveWordLeft() {
-	// If at start of line, move to end of previous line
-	if c.pos.Col == 0 {
-		if c.pos.Line > 0 {
-			c.pos.Line--
-			c.pos.Col = c.document.GetLineLength(c.pos.Line)
-		}
-		c.desired = c.pos.Col
-		return
+// SetBufferPos sets the cursor position in buffer coordinates.
+// VALIDATES: Position against document bounds
+// UPDATES: Desired column for vertical movement
+// USAGE: cursor.SetBufferPos(BufferPos{Line: 10, Col: 0})
+func (c *CursorManager) SetBufferPos(pos BufferPos) error {
+	if err := c.validator.ValidateBufferPos(pos); err != nil {
+		return err
 	}
 	
-	// Find word start
-	c.pos = c.document.FindWordStart(c.pos)
-	c.desired = c.pos.Col
+	c.bufferPos = pos
+	c.desired = pos.Col
+	return nil
 }
 
-// MoveWordRight moves cursor to start of next word
-func (c *Cursor) MoveWordRight() {
-	lineLength := c.document.GetLineLength(c.pos.Line)
-	
-	// If at end of line, move to start of next line
-	if c.pos.Col >= lineLength {
-		if c.pos.Line < c.document.LineCount()-1 {
-			c.pos.Line++
-			c.pos.Col = 0
-		}
-		c.desired = c.pos.Col
-		return
+// SetBufferPosWithDesiredColumn sets the cursor position while preserving desired column.
+// USAGE: For vertical movement that should remember intended column
+// EXAMPLE: Moving up/down tries to return to same column when possible
+func (c *CursorManager) SetBufferPosWithDesiredColumn(pos BufferPos, preserveDesired bool) error {
+	if err := c.validator.ValidateBufferPos(pos); err != nil {
+		return err
 	}
 	
-	// Find word end
-	c.pos = c.document.FindWordEnd(c.pos)
-	c.desired = c.pos.Col
+	c.bufferPos = pos
+	if !preserveDesired {
+		c.desired = pos.Col
+	}
+	return nil
 }
 
-// GetSelection returns the current selection
-func (c *Cursor) GetSelection() *Selection {
+// GetDesiredColumn returns the desired column for vertical movement.
+// This is used by Document methods to implement proper vertical movement behavior.
+func (c *CursorManager) GetDesiredColumn() int {
+	return c.desired
+}
+
+// SetDesiredColumn sets the desired column for vertical movement.
+// This is called by Document methods after horizontal movement.
+func (c *CursorManager) SetDesiredColumn(col int) {
+	c.desired = col
+}
+
+// GetSelection returns the current selection.
+func (c *CursorManager) GetSelection() *Selection {
 	return c.selection
 }
 
-// SetSelection sets the selection
-func (c *Cursor) SetSelection(selection *Selection) {
+// SetSelection sets the selection.
+func (c *CursorManager) SetSelection(selection *Selection) {
 	c.selection = selection
 }
 
-// ClearSelection clears the current selection
-func (c *Cursor) ClearSelection() {
+// ClearSelection clears the current selection.
+func (c *CursorManager) ClearSelection() {
 	c.selection = nil
 }
 
-// HasSelection returns true if there is an active selection
-func (c *Cursor) HasSelection() bool {
+// HasSelection returns true if there is an active selection.
+func (c *CursorManager) HasSelection() bool {
 	return c.selection != nil
 }
 
-// StartSelection starts a new selection from current position
-func (c *Cursor) StartSelection() {
+// StartSelection starts a new selection from current position.
+func (c *CursorManager) StartSelection() {
 	c.selection = &Selection{
-		Start: c.pos,
-		End:   c.pos,
+		Start: c.bufferPos,
+		End:   c.bufferPos,
 	}
 }
 
-// ExtendSelection extends the selection to current position
-func (c *Cursor) ExtendSelection() {
+// ExtendSelection extends the selection to current position.
+func (c *CursorManager) ExtendSelection() {
 	if c.selection == nil {
 		c.StartSelection()
 	} else {
-		c.selection.End = c.pos
+		c.selection.End = c.bufferPos
 	}
 }
 
-// GetSelectionText returns the selected text
-func (c *Cursor) GetSelectionText() string {
-	if c.selection == nil {
-		return ""
-	}
-	
-	start := c.selection.Start
-	end := c.selection.End
-	
-	// Ensure start is before end
-	if start.Line > end.Line || (start.Line == end.Line && start.Col > end.Col) {
-		start, end = end, start
-	}
-	
-	if start.Line == end.Line {
-		// Single line selection
-		line := c.document.GetLine(start.Line)
-		runes := []rune(line)
-		if start.Col < len(runes) && end.Col <= len(runes) {
-			return string(runes[start.Col:end.Col])
-		}
-		return ""
-	}
-	
-	// Multi-line selection
-	var result []string
-	
-	// First line
-	firstLine := c.document.GetLine(start.Line)
-	firstRunes := []rune(firstLine)
-	if start.Col < len(firstRunes) {
-		result = append(result, string(firstRunes[start.Col:]))
-	}
-	
-	// Middle lines
-	for i := start.Line + 1; i < end.Line; i++ {
-		result = append(result, c.document.GetLine(i))
-	}
-	
-	// Last line
-	lastLine := c.document.GetLine(end.Line)
-	lastRunes := []rune(lastLine)
-	if end.Col <= len(lastRunes) {
-		result = append(result, string(lastRunes[:end.Col]))
-	}
-	
-	return strings.Join(result, "\n")
+// NOTE: GetSelectionText is not implemented in CursorManager.
+// Selection text extraction belongs in the Editor where both Document and
+// CursorManager are available. Use Editor.GetSelectionText() instead.
+
+// UpdateViewport updates the viewport configuration.
+// This creates a new viewport instance to maintain immutability.
+func (c *CursorManager) UpdateViewport(viewport *Viewport) {
+	c.viewport = viewport
 }
+
+// UpdateValidator updates the position validator.
+// This is used when the document changes and the cursor manager needs to validate against the new document.
+func (c *CursorManager) UpdateValidator(validator PositionValidator) {
+	c.validator = validator
+}
+
+// GetViewport returns the current viewport.
+func (c *CursorManager) GetViewport() *Viewport {
+	return c.viewport
+}
+
+// NOTE: All cursor movement logic has been moved to Document methods.
+// CursorManager now only handles position state and coordinate transformations.
+// This follows the document-centric architecture pattern recommended by modern
+// text editor research (CodeMirror 6, Xi-editor retrospective).

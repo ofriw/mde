@@ -5,50 +5,54 @@ import (
 	"io/ioutil"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Editor manages the document, cursor, and history.
-// It implements CoordinateTransformer and CoordinateValidator interfaces.
+// Uses CursorManager for unified coordinate handling.
 type Editor struct {
-	document   *Document
-	cursor     *Cursor
-	history    *History
-	clipboard  string
-	lineNumbers bool
-	viewport   ViewPort
+	document      *Document
+	cursorManager *CursorManager
+	history       *History
+	clipboard     string
+	lineNumbers   bool
+	viewport      *Viewport
 }
 
-// ViewPort represents the visible area of the document
-type ViewPort struct {
-	Top    int
-	Left   int
-	Width  int
-	Height int
+// GetViewport returns the current viewport
+func (e *Editor) GetViewport() *Viewport {
+	return e.viewport
 }
 
 // NewEditor creates a new editor with an empty document
 func NewEditor() *Editor {
 	doc := NewEmptyDocument()
+	viewport := NewViewport(0, 0, 80, 24, 0, 4) // Default: no line numbers, 4-space tabs
+	cursorManager := NewCursorManager(viewport, doc)
+	
 	return &Editor{
-		document:   doc,
-		cursor:     NewCursor(doc),
-		history:    NewHistory(1000),
-		clipboard:  "",
-		lineNumbers: false,
-		viewport:   ViewPort{Top: 0, Left: 0, Width: 80, Height: 24},
+		document:      doc,
+		cursorManager: cursorManager,
+		history:       NewHistory(1000),
+		clipboard:     "",
+		lineNumbers:   false,
+		viewport:      viewport,
 	}
 }
 
 // NewEditorWithContent creates a new editor with the given content
 func NewEditorWithContent(content string) *Editor {
 	doc := NewDocument(content)
+	viewport := NewViewport(0, 0, 80, 24, 0, 4) // Default: no line numbers, 4-space tabs
+	cursorManager := NewCursorManager(viewport, doc)
+	
 	return &Editor{
-		document:   doc,
-		cursor:     NewCursor(doc),
-		history:    NewHistory(1000),
-		clipboard:  "",
-		lineNumbers: false,
-		viewport:   ViewPort{Top: 0, Left: 0, Width: 80, Height: 24},
+		document:      doc,
+		cursorManager: cursorManager,
+		history:       NewHistory(1000),
+		clipboard:     "",
+		lineNumbers:   false,
+		viewport:      viewport,
 	}
 }
 
@@ -57,25 +61,91 @@ func (e *Editor) GetDocument() *Document {
 	return e.document
 }
 
-// GetCursor returns the cursor
-func (e *Editor) GetCursor() *Cursor {
-	return e.cursor
+// GetCursor returns the cursor manager
+func (e *Editor) GetCursor() *CursorManager {
+	return e.cursorManager
 }
 
 // SetViewPort sets the viewport dimensions
 func (e *Editor) SetViewPort(width, height int) {
-	e.viewport.Width = width
-	e.viewport.Height = height
+	// Create new viewport with updated dimensions
+	newViewport := e.viewport.WithDimensions(width, height)
+	e.viewport = newViewport
+	e.cursorManager.UpdateViewport(newViewport)
 }
 
 // ToggleLineNumbers toggles line number display
 func (e *Editor) ToggleLineNumbers() {
 	e.lineNumbers = !e.lineNumbers
+	
+	// Update viewport with calculated line number width
+	lineNumberWidth := 0
+	if e.lineNumbers {
+		lineNumberWidth = e.calculateLineNumberWidth()
+	}
+	
+	newViewport := NewViewport(
+		e.viewport.GetTopLine(),
+		e.viewport.GetLeftColumn(),
+		e.viewport.GetWidth(),
+		e.viewport.GetHeight(),
+		lineNumberWidth,
+		e.viewport.GetTabWidth(),
+	)
+	
+	e.viewport = newViewport
+	e.cursorManager.UpdateViewport(newViewport)
+}
+
+// calculateLineNumberWidth calculates the width needed for line number display
+func (e *Editor) calculateLineNumberWidth() int {
+	maxLines := e.document.LineCount()
+	if maxLines == 0 {
+		maxLines = 1 // Minimum for empty documents
+	}
+	
+	// Calculate digits needed: log10(maxLines) + 1
+	digits := len(fmt.Sprintf("%d", maxLines))
+	
+	// Format string: "%Nd │ " where N is the digit count
+	formatStr := fmt.Sprintf("%%%dd │ ", digits)
+	
+	// Calculate actual width by measuring formatted output in runes (not bytes)
+	sample := fmt.Sprintf(formatStr, maxLines)
+	return utf8.RuneCountInString(sample)
 }
 
 // ShowLineNumbers returns whether line numbers are enabled
 func (e *Editor) ShowLineNumbers() bool {
 	return e.lineNumbers
+}
+
+// GetLineNumberWidth returns the viewport's line number width, or 0 if disabled
+func (e *Editor) GetLineNumberWidth() int {
+	if !e.lineNumbers {
+		return 0
+	}
+	return e.viewport.GetLineNumberWidth()
+}
+
+// FormatLineNumber formats a line number using the appropriate width
+func (e *Editor) FormatLineNumber(lineNum int) string {
+	if !e.lineNumbers {
+		return ""
+	}
+	
+	maxLines := e.document.LineCount()
+	if maxLines == 0 {
+		maxLines = 1
+	}
+	
+	// Calculate digits needed for the total number of lines
+	digits := len(fmt.Sprintf("%d", maxLines))
+	
+	// Create format string: "%Nd │ " where N is the digit count
+	formatStr := fmt.Sprintf("%%%dd │ ", digits)
+	
+	return fmt.Sprintf(formatStr, lineNum)
 }
 
 // LoadFile loads a file into the editor
@@ -87,7 +157,10 @@ func (e *Editor) LoadFile(filename string) error {
 	
 	e.document = NewDocument(string(content))
 	e.document.SetFilename(filename)
-	e.cursor = NewCursor(e.document)
+	// Update cursor manager to use the new document for validation
+	e.cursorManager.UpdateValidator(e.document)
+	// Reset cursor position to start of document
+	e.cursorManager.SetBufferPos(BufferPos{Line: 0, Col: 0})
 	e.history.Clear()
 	
 	
@@ -123,12 +196,12 @@ func (e *Editor) InsertText(text string) {
 		return
 	}
 	
-	pos := e.cursor.GetPosition()
+	pos := e.cursorManager.GetBufferPos()
 	
 	// Create change record
 	change := Change{
 		Type:      ChangeInsert,
-		Position:  pos,
+		BufferPos:  pos,
 		OldText:   "",
 		NewText:   text,
 		Timestamp: time.Now(),
@@ -145,7 +218,7 @@ func (e *Editor) InsertText(text string) {
 	}
 	
 	// Update cursor position
-	e.cursor.SetPosition(newPos)
+	e.cursorManager.SetBufferPos(newPos)
 	
 	// Add to history
 	e.history.AddChange(change, newPos)
@@ -158,7 +231,7 @@ func (e *Editor) DeleteText(count int) {
 		return
 	}
 	
-	pos := e.cursor.GetPosition()
+	pos := e.cursorManager.GetBufferPos()
 	
 	// Collect text being deleted
 	var deletedText strings.Builder
@@ -166,7 +239,7 @@ func (e *Editor) DeleteText(count int) {
 	
 	for i := 0; i < count && (deletePos.Col > 0 || deletePos.Line > 0); i++ {
 		if deletePos.Col > 0 {
-			ch := e.document.GetCharAt(Position{Line: deletePos.Line, Col: deletePos.Col - 1})
+			ch := e.document.GetCharAt(BufferPos{Line: deletePos.Line, Col: deletePos.Col - 1})
 			deletedText.WriteRune(ch)
 			deletePos = e.document.DeleteChar(deletePos)
 		} else if deletePos.Line > 0 {
@@ -182,14 +255,14 @@ func (e *Editor) DeleteText(count int) {
 	// Create change record
 	change := Change{
 		Type:      ChangeDelete,
-		Position:  deletePos,
+		BufferPos:  deletePos,
 		OldText:   deletedText.String(),
 		NewText:   "",
 		Timestamp: time.Now(),
 	}
 	
 	// Update cursor position
-	e.cursor.SetPosition(deletePos)
+	e.cursorManager.SetBufferPos(deletePos)
 	
 	// Add to history
 	e.history.AddChange(change, deletePos)
@@ -198,15 +271,15 @@ func (e *Editor) DeleteText(count int) {
 
 // Copy copies the selected text to clipboard
 func (e *Editor) Copy() {
-	if e.cursor.HasSelection() {
-		e.clipboard = e.cursor.GetSelectionText()
+	if e.cursorManager.HasSelection() {
+		e.clipboard = e.GetSelectionText()
 	}
 }
 
 // Cut cuts the selected text to clipboard
 func (e *Editor) Cut() {
-	if e.cursor.HasSelection() {
-		e.clipboard = e.cursor.GetSelectionText()
+	if e.cursorManager.HasSelection() {
+		e.clipboard = e.GetSelectionText()
 		e.DeleteSelection()
 	}
 }
@@ -220,11 +293,11 @@ func (e *Editor) Paste() {
 
 // DeleteSelection deletes the selected text
 func (e *Editor) DeleteSelection() {
-	if !e.cursor.HasSelection() {
+	if !e.cursorManager.HasSelection() {
 		return
 	}
 	
-	selection := e.cursor.GetSelection()
+	selection := e.cursorManager.GetSelection()
 	start := selection.Start
 	end := selection.End
 	
@@ -234,12 +307,12 @@ func (e *Editor) DeleteSelection() {
 	}
 	
 	// Get selected text
-	selectedText := e.cursor.GetSelectionText()
+	selectedText := e.GetSelectionText()
 	
 	// Create change record
 	change := Change{
 		Type:      ChangeDelete,
-		Position:  start,
+		BufferPos:  start,
 		OldText:   selectedText,
 		NewText:   "",
 		Timestamp: time.Now(),
@@ -248,23 +321,23 @@ func (e *Editor) DeleteSelection() {
 	// Delete the selected text
 	// This is a simplified implementation - in practice you'd want to
 	// delete the entire selection range more efficiently
-	e.cursor.SetPosition(start)
-	e.cursor.ClearSelection()
+	e.cursorManager.SetBufferPos(start)
+	e.cursorManager.ClearSelection()
 	
 	for range selectedText {
-		if e.cursor.GetPosition().Col > 0 || e.cursor.GetPosition().Line > 0 {
-			pos := e.cursor.GetPosition()
+		if e.cursorManager.GetBufferPos().Col > 0 || e.cursorManager.GetBufferPos().Line > 0 {
+			pos := e.cursorManager.GetBufferPos()
 			if pos.Col > 0 {
 				pos = e.document.DeleteChar(pos)
 			} else if pos.Line > 0 {
 				pos = e.document.DeleteLine(pos)
 			}
-			e.cursor.SetPosition(pos)
+			e.cursorManager.SetBufferPos(pos)
 		}
 	}
 	
 	// Add to history
-	e.history.AddChange(change, e.cursor.GetPosition())
+	e.history.AddChange(change, e.cursorManager.GetBufferPos())
 	
 }
 
@@ -286,7 +359,7 @@ func (e *Editor) Undo() {
 	}
 	
 	// Restore cursor position
-	e.cursor.SetPosition(entry.Cursor)
+	e.cursorManager.SetBufferPos(entry.Cursor)
 	
 }
 
@@ -306,7 +379,7 @@ func (e *Editor) Redo() {
 	}
 	
 	// Restore cursor position
-	e.cursor.SetPosition(entry.Cursor)
+	e.cursorManager.SetBufferPos(entry.Cursor)
 	
 }
 
@@ -326,10 +399,10 @@ func (e *Editor) CanRedo() bool {
 
 // GetVisibleLines returns the lines that should be visible in the viewport
 func (e *Editor) GetVisibleLines() []string {
-	lines := make([]string, 0, e.viewport.Height)
+	lines := make([]string, 0, e.viewport.GetHeight())
 	
-	for i := 0; i < e.viewport.Height; i++ {
-		lineNum := e.viewport.Top + i
+	for i := 0; i < e.viewport.GetHeight(); i++ {
+		lineNum := e.viewport.GetTopLine() + i
 		if lineNum >= e.document.LineCount() {
 			break
 		}
@@ -338,7 +411,7 @@ func (e *Editor) GetVisibleLines() []string {
 		
 		// Add line numbers if enabled
 		if e.lineNumbers {
-			lineNumStr := fmt.Sprintf("%4d │ ", lineNum+1)
+			lineNumStr := e.FormatLineNumber(lineNum + 1)
 			line = lineNumStr + line
 		}
 		
@@ -350,141 +423,177 @@ func (e *Editor) GetVisibleLines() []string {
 
 // AdjustViewPort adjusts the viewport to ensure cursor is visible
 func (e *Editor) AdjustViewPort() {
-	pos := e.cursor.GetPosition()
+	pos := e.cursorManager.GetBufferPos()
+	
+	newTopLine := e.viewport.GetTopLine()
+	newLeftColumn := e.viewport.GetLeftColumn()
 	
 	// Adjust vertical position
-	if pos.Line < e.viewport.Top {
-		e.viewport.Top = pos.Line
-	} else if pos.Line >= e.viewport.Top+e.viewport.Height {
-		e.viewport.Top = pos.Line - e.viewport.Height + 1
-		if e.viewport.Top < 0 {
-			e.viewport.Top = 0
+	if pos.Line < newTopLine {
+		newTopLine = pos.Line
+	} else if pos.Line >= newTopLine+e.viewport.GetHeight() {
+		newTopLine = pos.Line - e.viewport.GetHeight() + 1
+		if newTopLine < 0 {
+			newTopLine = 0
 		}
 	}
 	
 	// Adjust horizontal position
-	if pos.Col < e.viewport.Left {
-		e.viewport.Left = pos.Col
-	} else if pos.Col >= e.viewport.Left+e.viewport.Width {
-		e.viewport.Left = pos.Col - e.viewport.Width + 1
-		if e.viewport.Left < 0 {
-			e.viewport.Left = 0
+	if pos.Col < newLeftColumn {
+		newLeftColumn = pos.Col
+	} else if pos.Col >= newLeftColumn+e.viewport.GetWidth()-e.viewport.GetLineNumberWidth() {
+		newLeftColumn = pos.Col - e.viewport.GetWidth() + e.viewport.GetLineNumberWidth() + 1
+		if newLeftColumn < 0 {
+			newLeftColumn = 0
 		}
 	}
-}
-
-// GetCursorScreenPosition returns the cursor position relative to viewport
-// DEPRECATED: Use GetCursorContentPosition() instead for explicit coordinate types
-func (e *Editor) GetCursorScreenPosition() (int, int) {
-	pos := e.cursor.GetPosition()
-	screenRow := pos.Line - e.viewport.Top
-	screenCol := pos.Col - e.viewport.Left
 	
-	// Account for line numbers
-	if e.lineNumbers {
-		screenCol += 6 // "1234 │ "
-	}
-	
-	// Note: We return the calculated screen position even if it's outside viewport bounds
-	// The caller is responsible for checking if the cursor is visible
-	return screenRow, screenCol
-}
-
-// GetCursorContentPosition returns the cursor position in content coordinates.
-// This is the explicit coordinate transformation from DocumentPos to ContentPos.
-func (e *Editor) GetCursorContentPosition() ContentPos {
-	docPos := e.GetCursorDocumentPosition()
-	return e.TransformDocumentToContent(docPos)
-}
-
-// GetCursorDocumentPosition returns the cursor position in document coordinates.
-func (e *Editor) GetCursorDocumentPosition() DocumentPos {
-	pos := e.cursor.GetPosition()
-	return DocumentPos{Line: pos.Line, Col: pos.Col}
-}
-
-// TransformDocumentToContent converts document coordinates to content coordinates.
-// This transformation includes viewport offset and line number offset.
-func (e *Editor) TransformDocumentToContent(docPos DocumentPos) ContentPos {
-	// STEP 1: Apply viewport offset (document → viewport)
-	contentPos := ContentPos{
-		Line: docPos.Line - e.viewport.Top,
-		Col:  docPos.Col - e.viewport.Left,
-	}
-	
-	// STEP 2: Apply line number offset (viewport → content)
-	if e.lineNumbers {
-		contentPos.Col += 6 // "  1 │ " prefix
-	}
-	
-	return contentPos
-}
-
-// GetViewportInfo returns current viewport state for debugging.
-func (e *Editor) GetViewportInfo() ViewportInfo {
-	return ViewportInfo{
-		Top:         e.viewport.Top,
-		Left:        e.viewport.Left,
-		Width:       e.viewport.Width,
-		Height:      e.viewport.Height,
-		LineNumbers: e.lineNumbers,
+	// Update viewport if needed
+	if newTopLine != e.viewport.GetTopLine() || newLeftColumn != e.viewport.GetLeftColumn() {
+		newViewport := NewViewport(
+			newTopLine,
+			newLeftColumn,
+			e.viewport.GetWidth(),
+			e.viewport.GetHeight(),
+			e.viewport.GetLineNumberWidth(),
+			e.viewport.GetTabWidth(),
+		)
+		e.viewport = newViewport
+		e.cursorManager.UpdateViewport(newViewport)
 	}
 }
 
-// ValidateDocumentPos checks if a document position is within bounds.
-func (e *Editor) ValidateDocumentPos(pos DocumentPos) error {
-	if !pos.IsValid() {
-		return NewDocumentCoordinateError(pos, "negative coordinates")
-	}
-	
-	if pos.Line >= e.document.LineCount() {
-		return NewDocumentCoordinateError(pos, 
-			fmt.Sprintf("line %d >= document line count %d", pos.Line, e.document.LineCount()))
-	}
-	
-	lineLength := e.document.GetLineLength(pos.Line)
-	if pos.Col > lineLength {
-		return NewDocumentCoordinateError(pos,
-			fmt.Sprintf("column %d > line length %d", pos.Col, lineLength))
-	}
-	
-	return nil
+
+// GetCursorBufferPosition returns the cursor position in buffer coordinates
+func (e *Editor) GetCursorBufferPosition() BufferPos {
+	return e.cursorManager.GetBufferPos()
 }
 
-// ValidateContentPos checks if a content position is within bounds.
-func (e *Editor) ValidateContentPos(pos ContentPos) error {
-	if !pos.IsValid() {
-		return NewContentCoordinateError(pos, "negative coordinates")
-	}
-	
-	if pos.Line >= e.viewport.Height {
-		return NewContentCoordinateError(pos,
-			fmt.Sprintf("line %d >= viewport height %d", pos.Line, e.viewport.Height))
-	}
-	
-	// CRITICAL CHECK: Content position should account for line numbers
-	if e.lineNumbers && pos.Col < 6 {
-		return NewContentCoordinateError(pos,
-			fmt.Sprintf("column %d < 6 but line numbers enabled (missing line number offset)", pos.Col))
-	}
-	
-	// Calculate maximum content width
-	maxContentWidth := e.viewport.Width
-	if pos.Col > maxContentWidth {
-		return NewContentCoordinateError(pos,
-			fmt.Sprintf("column %d > viewport width %d", pos.Col, maxContentWidth))
-	}
-	
-	return nil
+// ============================================================================
+// CURSOR MOVEMENT METHODS
+// ============================================================================
+//
+// ARCHITECTURAL PATTERN:
+// These methods implement the Editor orchestration pattern where:
+// 1. Editor calls Document methods for content-aware movement logic
+// 2. Editor updates CursorManager with new positions
+// 3. Editor adjusts viewport to keep cursor visible
+//
+// This follows the document-centric architecture recommended by modern text
+// editor research, avoiding the Xi-editor pitfall of over-modularization.
+//
+// DESIGN PRINCIPLE:
+// Each method follows the pattern:
+//   currentPos := e.cursorManager.GetBufferPos()
+//   newPos := e.document.MoveCursor[Direction](currentPos, ...)
+//   e.cursorManager.SetBufferPos(newPos)
+//   e.AdjustViewPort()
+
+// MoveCursorRight moves cursor right by one character with line wrapping.
+func (e *Editor) MoveCursorRight() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorRight(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// MoveCursorLeft moves cursor left by one character with line wrapping.
+func (e *Editor) MoveCursorLeft() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorLeft(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// MoveCursorUp moves cursor up by one line with desired column preservation.
+func (e *Editor) MoveCursorUp() {
+	currentPos := e.cursorManager.GetBufferPos()
+	desiredCol := e.cursorManager.GetDesiredColumn()
+	newPos, _ := e.document.MoveCursorUp(currentPos, desiredCol)
+	e.cursorManager.SetBufferPosWithDesiredColumn(newPos, true) // Preserve desired column
+	e.AdjustViewPort()
+}
+
+// MoveCursorDown moves cursor down by one line with desired column preservation.
+func (e *Editor) MoveCursorDown() {
+	currentPos := e.cursorManager.GetBufferPos()
+	desiredCol := e.cursorManager.GetDesiredColumn()
+	newPos, _ := e.document.MoveCursorDown(currentPos, desiredCol)
+	e.cursorManager.SetBufferPosWithDesiredColumn(newPos, true) // Preserve desired column
+	e.AdjustViewPort()
+}
+
+// MoveCursorToLineStart moves cursor to beginning of current line.
+func (e *Editor) MoveCursorToLineStart() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorToLineStart(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// MoveCursorToLineEnd moves cursor to end of current line.
+func (e *Editor) MoveCursorToLineEnd() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorToLineEnd(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// MoveCursorToDocumentStart moves cursor to beginning of document.
+func (e *Editor) MoveCursorToDocumentStart() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorToDocumentStart(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// MoveCursorToDocumentEnd moves cursor to end of document.
+func (e *Editor) MoveCursorToDocumentEnd() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorToDocumentEnd(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// MoveCursorWordLeft moves cursor to start of previous word.
+func (e *Editor) MoveCursorWordLeft() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorWordLeft(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// MoveCursorWordRight moves cursor to start of next word.
+func (e *Editor) MoveCursorWordRight() {
+	currentPos := e.cursorManager.GetBufferPos()
+	newPos := e.document.MoveCursorWordRight(currentPos)
+	e.cursorManager.SetBufferPos(newPos)
+	e.cursorManager.SetDesiredColumn(newPos.Col)
+	e.AdjustViewPort()
+}
+
+// GetSelectionText returns the text content of the current selection.
+// This method properly implements the document-centric architecture where
+// the Editor orchestrates between Document (content) and CursorManager (selection state).
+func (e *Editor) GetSelectionText() string {
+	selection := e.cursorManager.GetSelection()
+	return e.document.GetSelectionText(selection)
 }
 
 // FindText searches for text in the document starting from current cursor position
-func (e *Editor) FindText(searchText string, caseSensitive bool) *Position {
+func (e *Editor) FindText(searchText string, caseSensitive bool) *BufferPos {
 	if searchText == "" {
 		return nil
 	}
 	
-	pos := e.cursor.GetPosition()
+	pos := e.cursorManager.GetBufferPos()
 	text := e.document.GetText()
 	
 	if !caseSensitive {
@@ -522,7 +631,7 @@ func (e *Editor) ReplaceText(oldText, newText string, caseSensitive bool) bool {
 		return false
 	}
 	
-	pos := e.cursor.GetPosition()
+	pos := e.cursorManager.GetBufferPos()
 	text := e.document.GetText()
 	
 	searchText := oldText
@@ -562,19 +671,19 @@ func (e *Editor) GotoLine(lineNum int) {
 		lineNum = e.document.LineCount()
 	}
 	
-	newPos := Position{Line: lineNum - 1, Col: 0}
-	e.cursor.SetPosition(newPos)
+	newPos := BufferPos{Line: lineNum - 1, Col: 0}
+	e.cursorManager.SetBufferPos(newPos)
 }
 
-// offsetToPosition converts text offset to Position
-func (e *Editor) offsetToPosition(offset int) *Position {
+// offsetToPosition converts text offset to BufferPos
+func (e *Editor) offsetToPosition(offset int) *BufferPos {
 	text := e.document.GetText()
 	lines := strings.Split(text, "\n")
 	
 	currentOffset := 0
 	for lineNum, line := range lines {
 		if currentOffset+len(line) >= offset {
-			return &Position{
+			return &BufferPos{
 				Line: lineNum,
 				Col:  offset - currentOffset,
 			}
@@ -583,12 +692,8 @@ func (e *Editor) offsetToPosition(offset int) *Position {
 	}
 	
 	// If we get here, offset is at end of document
-	return &Position{
+	return &BufferPos{
 		Line: len(lines) - 1,
 		Col:  len(lines[len(lines)-1]),
 	}
-}
-// GetViewPort returns the current viewport
-func (e *Editor) GetViewPort() ViewPort {
-	return e.viewport
 }
