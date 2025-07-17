@@ -107,3 +107,31 @@ Created ticket after discovering coordinate system ambiguity caused horizontal c
 - ✅ LLM-friendly codebase with explicit contracts
 
 The coordinate system is now self-documenting and prevents the class of bugs that caused the original horizontal cursor movement issue.
+
+## 2025-07-17T09:01:22+03:00
+**OBSOLETE**: This ticket has been superseded by comprehensive architectural research and redesign.
+
+### Status: OBSOLETE
+This implementation, while functional, has been identified as a **band-aid solution** that doesn't address the fundamental architectural issues. Comprehensive research of modern UI frameworks and text editor architectures has revealed that the current approach still violates best practices.
+
+### Issues with Current Implementation:
+1. **Still uses multiple coordinate types** (DocumentPos, ContentPos, ScreenPos) 
+2. **Runtime configuration synchronization** between editor and renderer remains brittle
+3. **Complex bidirectional transformations** still exist
+4. **Scattered coordinate logic** across multiple components
+
+### Superseded By:
+**Ticket 010-coordinate-system-architecture-refactor** - Complete architectural refactor based on research from:
+- Android Architecture Guide (Single Source of Truth)
+- Xi-editor retrospective (lessons from modern text editor architecture)
+- CodeMirror coordinate system (proven transformation patterns)  
+- ncurses/terminal UI best practices
+- QPainter graphics coordinate systems
+
+### New Architecture Principles:
+1. **Single Source of Truth**: BufferPos only, all others computed on-demand
+2. **Immutable Configuration**: No runtime synchronization needed
+3. **Unidirectional Transformation**: Buffer → Screen only
+4. **Centralized Authority**: CursorManager owns all positioning logic
+
+This ticket's implementation should be considered **technical debt** and will be completely replaced by the new architecture.

@@ -45,3 +45,30 @@ make install    # Install locally
 
 ## Current Focus
 Check `tickets/` for active work. One task in progress at a time.
+
+## Coordinate System (Critical for Cursor Issues)
+
+The editor uses a unified coordinate system to prevent cursor positioning bugs:
+
+**SINGLE SOURCE OF TRUTH:**
+- `BufferPos{Line, Col}` - authoritative position in document (0-indexed)
+- `ScreenPos{Row, Col}` - derived via `viewport.BufferToScreen(bufferPos)`
+
+**USAGE PATTERNS:**
+```go
+// ✅ Correct cursor positioning
+cursor.SetBufferPos(BufferPos{Line: 10, Col: 0})
+screenPos, err := cursor.GetScreenPos()
+if err == ErrPositionNotVisible { /* handle off-screen */ }
+
+// ❌ Wrong - never create screen positions directly
+screenPos := ScreenPos{Row: 10, Col: 0}
+```
+
+**COMMON ISSUES:**
+- Cursor not visible? Check `viewport.BufferToScreen()` error
+- Position validation failing? Use `validator.ValidateBufferPos()`
+- Coordinate transformation error? Position may be outside viewport
+
+**TRANSFORMATION CHAIN:**
+`BufferPos → Viewport → ScreenPos` (unidirectional, immutable)
