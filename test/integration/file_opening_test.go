@@ -47,22 +47,30 @@ func TestFileOpening_RealFileLoadWorkflow(t *testing.T) {
 		
 		// This is the critical test - cursor should be at (0,0) after file load
 		editor := model.GetEditor()
-		pos := editor.GetCursor().GetPosition()
+		pos := editor.GetCursor().GetBufferPos()
 		
 		// Test the actual cursor position
 		assert.Equal(t, 0, pos.Line, "Cursor should be at line 0 after file load")
 		assert.Equal(t, 0, pos.Col, "Cursor should be at column 0 after file load")
 		
 		// Test the screen position calculation
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		screenRow, screenCol := func() (int, int) {
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil { return -1, -1 }
+		return screenPos.Row, screenPos.Col
+	}()
 		assert.Equal(t, 0, screenRow, "Screen row should be 0 for cursor at (0,0)")
 		assert.Equal(t, 0, screenCol, "Screen col should be 0 for cursor at (0,0)")
 		
 		// Test with line numbers enabled
 		editor.ToggleLineNumbers()
-		screenRow, screenCol = editor.GetCursorScreenPosition()
+		screenRow, screenCol = func() (int, int) {
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil { return -1, -1 }
+		return screenPos.Row, screenPos.Col
+	}()
 		assert.Equal(t, 0, screenRow, "Screen row should be 0 with line numbers")
-		assert.Equal(t, 6, screenCol, "Screen col should be 6 with line numbers")
+		assert.Equal(t, editor.GetLineNumberWidth(), screenCol, "Screen col should match calculated line number width")
 	})
 	
 	t.Run("cursor rendering after real file load", func(t *testing.T) {
@@ -180,13 +188,17 @@ func TestFileOpening_RealFileLoadWorkflow(t *testing.T) {
 		
 		// Test cursor position in empty file
 		editor := model.GetEditor()
-		pos := editor.GetCursor().GetPosition()
+		pos := editor.GetCursor().GetBufferPos()
 		
 		assert.Equal(t, 0, pos.Line, "Cursor should be at line 0 in empty file")
 		assert.Equal(t, 0, pos.Col, "Cursor should be at column 0 in empty file")
 		
 		// Test screen position
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		screenRow, screenCol := func() (int, int) {
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil { return -1, -1 }
+		return screenPos.Row, screenPos.Col
+	}()
 		assert.Equal(t, 0, screenRow, "Screen row should be 0 for empty file")
 		assert.Equal(t, 0, screenCol, "Screen col should be 0 for empty file")
 	})

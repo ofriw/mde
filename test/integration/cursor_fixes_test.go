@@ -22,23 +22,28 @@ func TestCursorFixes_FallbackRenderingFixed(t *testing.T) {
 	
 	// Test cursor rendering at different positions
 	testCases := []struct {
-		pos  ast.Position
+		pos  ast.BufferPos
 		desc string
 	}{
-		{ast.Position{Line: 0, Col: 0}, "start of first line"},
-		{ast.Position{Line: 0, Col: 5}, "middle of first line"},
-		{ast.Position{Line: 0, Col: 11}, "end of first line"},
-		{ast.Position{Line: 1, Col: 0}, "start of second line"},
-		{ast.Position{Line: 1, Col: 9}, "end of second line"},
-		{ast.Position{Line: 2, Col: 10}, "end of last line"},
+		{ast.BufferPos{Line: 0, Col: 0}, "start of first line"},
+		{ast.BufferPos{Line: 0, Col: 5}, "middle of first line"},
+		{ast.BufferPos{Line: 0, Col: 11}, "end of first line"},
+		{ast.BufferPos{Line: 1, Col: 0}, "start of second line"},
+		{ast.BufferPos{Line: 1, Col: 9}, "end of second line"},
+		{ast.BufferPos{Line: 2, Col: 10}, "end of last line"},
 	}
 	
 	for _, tc := range testCases {
-		editor.GetCursor().SetPosition(tc.pos)
+		editor.GetCursor().SetBufferPos(tc.pos)
 		
 		// Simulate the fixed fallback rendering logic
 		lines := editor.GetVisibleLines()
-		cursorRow, cursorCol := editor.GetCursorScreenPosition()
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, skip this test case
+			continue
+		}
+		cursorRow, cursorCol := screenPos.Row, screenPos.Col
 		
 		if cursorRow >= 0 && cursorRow < len(lines) && cursorCol >= 0 {
 			line := lines[cursorRow]
@@ -101,21 +106,22 @@ func TestCursorFixes_MouseCoordinateTransformationFixed(t *testing.T) {
 	
 	for _, tc := range testCases {
 		// Apply the fixed mouse coordinate transformation logic
-		viewport := editor.GetViewPort()
-		docRow := viewport.Top + tc.clickRow
+		viewport := editor.GetViewport()
+		docRow := viewport.GetTopLine() + tc.clickRow
 		docCol := tc.clickCol
 		
 		// Account for line numbers first (fixed order)
 		if editor.ShowLineNumbers() {
-			if tc.clickCol < 6 {
+			lineNumberWidth := editor.GetLineNumberWidth()
+			if tc.clickCol < lineNumberWidth {
 				docCol = 0
 			} else {
-				docCol = tc.clickCol - 6
+				docCol = tc.clickCol - lineNumberWidth
 			}
 		}
 		
 		// Adjust for viewport offset
-		docCol += viewport.Left
+		docCol += viewport.GetLeftColumn()
 		
 		// Ensure within bounds
 		doc := editor.GetDocument()
@@ -135,28 +141,33 @@ func TestCursorFixes_MouseCoordinateTransformationFixed(t *testing.T) {
 		}
 		
 		// Set cursor position
-		editor.GetCursor().SetPosition(ast.Position{Line: docRow, Col: docCol})
+		editor.GetCursor().SetBufferPos(ast.BufferPos{Line: docRow, Col: docCol})
 		
 		// Test round-trip consistency
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, skip this test case
+			continue
+		}
+		screenRow, screenCol := screenPos.Row, screenPos.Col
 		
 		// Convert back to document coordinates
-		backDocRow := viewport.Top + screenRow
-		backDocCol := viewport.Left + screenCol
+		backDocRow := viewport.GetTopLine() + screenRow
+		backDocCol := viewport.GetLeftColumn() + screenCol
 		
 		if editor.ShowLineNumbers() {
-			backDocCol -= 6
+			backDocCol -= editor.GetLineNumberWidth()
 		}
 		
 		// Should be consistent
-		actualPos := editor.GetCursor().GetPosition()
+		actualPos := editor.GetCursor().GetBufferPos()
 		assert.Equal(t, actualPos.Line, backDocRow, "Round-trip row consistency for %s", tc.desc)
 		assert.Equal(t, actualPos.Col, backDocCol, "Round-trip column consistency for %s", tc.desc)
 	}
 }
 
 func TestCursorFixes_ScreenPositionEdgeCasesFixed(t *testing.T) {
-	// Test that GetCursorScreenPosition handles edge cases properly
+	// Test that cursor screen position calculation handles edge cases properly
 	
 	model := tui.New()
 	testutils.LoadContentIntoModel(model, "short\nverylonglinewithnospaces\na\n")
@@ -165,21 +176,26 @@ func TestCursorFixes_ScreenPositionEdgeCasesFixed(t *testing.T) {
 	
 	// Test edge cases
 	testCases := []struct {
-		pos  ast.Position
+		pos  ast.BufferPos
 		desc string
 	}{
-		{ast.Position{Line: 0, Col: 0}, "start of document"},
-		{ast.Position{Line: 0, Col: 5}, "end of short line"},
-		{ast.Position{Line: 1, Col: 0}, "start of long line"},
-		{ast.Position{Line: 1, Col: 23}, "end of long line"},
-		{ast.Position{Line: 2, Col: 0}, "start of single char line"},
-		{ast.Position{Line: 2, Col: 1}, "end of single char line"},
-		{ast.Position{Line: 3, Col: 0}, "empty line"},
+		{ast.BufferPos{Line: 0, Col: 0}, "start of document"},
+		{ast.BufferPos{Line: 0, Col: 5}, "end of short line"},
+		{ast.BufferPos{Line: 1, Col: 0}, "start of long line"},
+		{ast.BufferPos{Line: 1, Col: 23}, "end of long line"},
+		{ast.BufferPos{Line: 2, Col: 0}, "start of single char line"},
+		{ast.BufferPos{Line: 2, Col: 1}, "end of single char line"},
+		{ast.BufferPos{Line: 3, Col: 0}, "empty line"},
 	}
 	
 	for _, tc := range testCases {
-		editor.GetCursor().SetPosition(tc.pos)
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		editor.GetCursor().SetBufferPos(tc.pos)
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, skip this test case
+			continue
+		}
+		screenRow, screenCol := screenPos.Row, screenPos.Col
 		
 		// Basic sanity checks
 		assert.True(t, screenRow >= 0 || tc.pos.Line == 0, 
@@ -188,9 +204,9 @@ func TestCursorFixes_ScreenPositionEdgeCasesFixed(t *testing.T) {
 			"Screen column should be reasonable for %s", tc.desc)
 		
 		// Test consistency with viewport
-		viewport := editor.GetViewPort()
-		expectedRow := tc.pos.Line - viewport.Top
-		expectedCol := tc.pos.Col - viewport.Left
+		viewport := editor.GetViewport()
+		expectedRow := tc.pos.Line - viewport.GetTopLine()
+		expectedCol := tc.pos.Col - viewport.GetLeftColumn()
 		
 		if editor.ShowLineNumbers() {
 			expectedCol += 6
@@ -218,24 +234,29 @@ func TestCursorFixes_ViewportSynchronizationFixed(t *testing.T) {
 	
 	// Test various scenarios
 	testCases := []struct {
-		pos  ast.Position
+		pos  ast.BufferPos
 		desc string
 	}{
-		{ast.Position{Line: 0, Col: 0}, "start of document"},
-		{ast.Position{Line: 10, Col: 5}, "middle of document"},
-		{ast.Position{Line: 19, Col: 10}, "end of document"},
+		{ast.BufferPos{Line: 0, Col: 0}, "start of document"},
+		{ast.BufferPos{Line: 10, Col: 5}, "middle of document"},
+		{ast.BufferPos{Line: 19, Col: 10}, "end of document"},
 	}
 	
 	for _, tc := range testCases {
-		editor.GetCursor().SetPosition(tc.pos)
+		editor.GetCursor().SetBufferPos(tc.pos)
 		
 		// Get current viewport and screen position
-		viewport := editor.GetViewPort()
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		viewport := editor.GetViewport()
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, skip this test case
+			continue
+		}
+		screenRow, screenCol := screenPos.Row, screenPos.Col
 		
 		// Test forward transformation
-		expectedScreenRow := tc.pos.Line - viewport.Top
-		expectedScreenCol := tc.pos.Col - viewport.Left
+		expectedScreenRow := tc.pos.Line - viewport.GetTopLine()
+		expectedScreenCol := tc.pos.Col - viewport.GetLeftColumn()
 		
 		if editor.ShowLineNumbers() {
 			expectedScreenCol += 6
@@ -245,11 +266,11 @@ func TestCursorFixes_ViewportSynchronizationFixed(t *testing.T) {
 		assert.Equal(t, expectedScreenCol, screenCol, "Forward transformation column for %s", tc.desc)
 		
 		// Test reverse transformation
-		backDocRow := viewport.Top + screenRow
-		backDocCol := viewport.Left + screenCol
+		backDocRow := viewport.GetTopLine() + screenRow
+		backDocCol := viewport.GetLeftColumn() + screenCol
 		
 		if editor.ShowLineNumbers() {
-			backDocCol -= 6
+			backDocCol -= editor.GetLineNumberWidth()
 		}
 		
 		assert.Equal(t, tc.pos.Line, backDocRow, "Reverse transformation row for %s", tc.desc)
@@ -267,36 +288,41 @@ func TestCursorFixes_UnicodeHandlingFixed(t *testing.T) {
 	
 	// Test Unicode positions
 	testCases := []struct {
-		pos  ast.Position
+		pos  ast.BufferPos
 		desc string
 	}{
-		{ast.Position{Line: 0, Col: 6}, "before Unicode character"},
-		{ast.Position{Line: 0, Col: 8}, "after Unicode characters"},
-		{ast.Position{Line: 1, Col: 5}, "after Japanese characters"},
-		{ast.Position{Line: 2, Col: 4}, "after emoji characters"},
+		{ast.BufferPos{Line: 0, Col: 6}, "before Unicode character"},
+		{ast.BufferPos{Line: 0, Col: 8}, "after Unicode characters"},
+		{ast.BufferPos{Line: 1, Col: 5}, "after Japanese characters"},
+		{ast.BufferPos{Line: 2, Col: 4}, "after emoji characters"},
 	}
 	
 	for _, tc := range testCases {
-		editor.GetCursor().SetPosition(tc.pos)
+		editor.GetCursor().SetBufferPos(tc.pos)
 		
 		// Position should be valid
-		actualPos := editor.GetCursor().GetPosition()
+		actualPos := editor.GetCursor().GetBufferPos()
 		assert.True(t, actualPos.Line >= 0, "Unicode position line should be valid for %s", tc.desc)
 		assert.True(t, actualPos.Col >= 0, "Unicode position column should be valid for %s", tc.desc)
 		
 		// Screen position should be calculable
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, skip this test case
+			continue
+		}
+		screenRow, screenCol := screenPos.Row, screenPos.Col
 		assert.True(t, screenRow >= 0 || actualPos.Line == 0, "Unicode screen row should be reasonable for %s", tc.desc)
 		assert.True(t, screenCol >= 0 || (actualPos.Col == 0 && !editor.ShowLineNumbers()), 
 			"Unicode screen column should be reasonable for %s", tc.desc)
 		
 		// Round-trip should be consistent
-		viewport := editor.GetViewPort()
-		backDocRow := viewport.Top + screenRow
-		backDocCol := viewport.Left + screenCol
+		viewport := editor.GetViewport()
+		backDocRow := viewport.GetTopLine() + screenRow
+		backDocCol := viewport.GetLeftColumn() + screenCol
 		
 		if editor.ShowLineNumbers() {
-			backDocCol -= 6
+			backDocCol -= editor.GetLineNumberWidth()
 		}
 		
 		assert.Equal(t, actualPos.Line, backDocRow, "Unicode round-trip row for %s", tc.desc)

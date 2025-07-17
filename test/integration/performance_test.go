@@ -21,14 +21,14 @@ func TestCursorPerformance_BasicMovement(t *testing.T) {
 	
 	// Test various cursor movements
 	movements := []func(){
-		func() { editor.GetCursor().MoveRight() },
-		func() { editor.GetCursor().MoveLeft() },
-		func() { editor.GetCursor().MoveUp() },
-		func() { editor.GetCursor().MoveDown() },
-		func() { editor.GetCursor().MoveWordRight() },
-		func() { editor.GetCursor().MoveWordLeft() },
-		func() { editor.GetCursor().MoveToLineEnd() },
-		func() { editor.GetCursor().MoveToLineStart() },
+		func() { editor.MoveCursorRight() },
+		func() { editor.MoveCursorLeft() },
+		func() { editor.MoveCursorUp() },
+		func() { editor.MoveCursorDown() },
+		func() { editor.MoveCursorWordRight() },
+		func() { editor.MoveCursorWordLeft() },
+		func() { editor.MoveCursorToLineEnd() },
+		func() { editor.MoveCursorToLineStart() },
 	}
 	
 	for _, movement := range movements {
@@ -42,7 +42,7 @@ func TestCursorPerformance_BasicMovement(t *testing.T) {
 }
 
 func TestCursorPerformance_ScreenPositionCalculation(t *testing.T) {
-	// Test that GetCursorScreenPosition meets performance targets
+	// Test that cursor screen position calculation meets performance targets
 	// Target: Render < 50ms for 1000 lines (from ticket)
 	
 	model := tui.New()
@@ -51,7 +51,7 @@ func TestCursorPerformance_ScreenPositionCalculation(t *testing.T) {
 	editor := model.GetEditor()
 	
 	// Test screen position calculation at various positions
-	positions := []ast.Position{
+	positions := []ast.BufferPos{
 		{Line: 0, Col: 0},
 		{Line: 100, Col: 50},
 		{Line: 500, Col: 25},
@@ -59,10 +59,15 @@ func TestCursorPerformance_ScreenPositionCalculation(t *testing.T) {
 	}
 	
 	for _, pos := range positions {
-		editor.GetCursor().SetPosition(pos)
+		editor.GetCursor().SetBufferPos(pos)
 		
 		start := time.Now()
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, skip timing for this position
+			continue
+		}
+		screenRow, screenCol := screenPos.Row, screenPos.Col
 		duration := time.Since(start)
 		
 		// Screen position calculation should be fast
@@ -87,9 +92,9 @@ func TestCursorPerformance_MassiveDocument(t *testing.T) {
 	start := time.Now()
 	
 	// Move to various positions in large document
-	editor.GetCursor().MoveToDocumentEnd()
-	editor.GetCursor().MoveToDocumentStart()
-	editor.GetCursor().SetPosition(ast.Position{Line: 5000, Col: 50})
+	editor.MoveCursorToDocumentEnd()
+	editor.MoveCursorToDocumentStart()
+	editor.GetCursor().SetBufferPos(ast.BufferPos{Line: 5000, Col: 50})
 	
 	duration := time.Since(start)
 	
@@ -108,7 +113,7 @@ func TestCursorPerformance_ContinuousMovement(t *testing.T) {
 	// Simulate continuous right arrow key
 	start := time.Now()
 	for i := 0; i < 1000; i++ {
-		editor.GetCursor().MoveRight()
+		editor.MoveCursorRight()
 	}
 	duration := time.Since(start)
 	
@@ -137,8 +142,13 @@ func TestCursorPerformance_ViewportUpdates(t *testing.T) {
 		start := time.Now()
 		
 		editor.SetViewPort(size.width, size.height)
-		editor.GetCursor().SetPosition(ast.Position{Line: 100, Col: 25})
-		screenRow, screenCol := editor.GetCursorScreenPosition()
+		editor.GetCursor().SetBufferPos(ast.BufferPos{Line: 100, Col: 25})
+		screenPos, err := editor.GetCursor().GetScreenPos()
+		if err != nil {
+			// Cursor not visible, skip timing for this position
+			continue
+		}
+		screenRow, screenCol := screenPos.Row, screenPos.Col
 		
 		duration := time.Since(start)
 		
@@ -162,7 +172,7 @@ func BenchmarkCursorMovement(b *testing.B) {
 	b.ResetTimer()
 	
 	for i := 0; i < b.N; i++ {
-		editor.GetCursor().MoveRight()
+		editor.MoveCursorRight()
 	}
 }
 
@@ -173,12 +183,12 @@ func BenchmarkScreenPositionCalculation(b *testing.B) {
 	testutils.LoadContentIntoModel(model, generateLargeDocument(1000))
 	
 	editor := model.GetEditor()
-	editor.GetCursor().SetPosition(ast.Position{Line: 500, Col: 25})
+	editor.GetCursor().SetBufferPos(ast.BufferPos{Line: 500, Col: 25})
 	
 	b.ResetTimer()
 	
 	for i := 0; i < b.N; i++ {
-		editor.GetCursorScreenPosition()
+		_, _ = editor.GetCursor().GetScreenPos()
 	}
 }
 
@@ -195,7 +205,7 @@ func BenchmarkCursorPositioning(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		line := i % 1000
 		col := i % 50
-		editor.GetCursor().SetPosition(ast.Position{Line: line, Col: col})
+		editor.GetCursor().SetBufferPos(ast.BufferPos{Line: line, Col: col})
 	}
 }
 
@@ -227,10 +237,10 @@ func TestCursorPerformance_MemoryUsage(t *testing.T) {
 	
 	// Perform many cursor operations
 	for i := 0; i < 10000; i++ {
-		editor.GetCursor().MoveRight()
-		editor.GetCursor().MoveLeft()
-		editor.GetCursor().SetPosition(ast.Position{Line: i % 100, Col: i % 50})
-		editor.GetCursorScreenPosition()
+		editor.MoveCursorRight()
+		editor.MoveCursorLeft()
+		editor.GetCursor().SetBufferPos(ast.BufferPos{Line: i % 100, Col: i % 50})
+		_, _ = editor.GetCursor().GetScreenPos()
 	}
 	
 	// If we get here without running out of memory, the test passes

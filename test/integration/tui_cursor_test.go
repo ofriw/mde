@@ -71,7 +71,7 @@ func TestTUICursor_InitialPositionGhostLineBug(t *testing.T) {
 		}
 		
 		// Test initial cursor position directly
-		pos := editor.GetCursor().GetPosition()
+		pos := editor.GetCursor().GetBufferPos()
 		
 		// Verify cursor is at (0,0)
 		assert.Equal(t, 0, pos.Line, "Cursor should be at line 0")
@@ -123,7 +123,7 @@ func TestTUICursor_InitialPositionGhostLineBug(t *testing.T) {
 		
 		// Test initial cursor position
 		editor := model.GetEditor()
-		pos := editor.GetCursor().GetPosition()
+		pos := editor.GetCursor().GetBufferPos()
 		assert.Equal(t, 0, pos.Line, "Cursor should be at line 0")
 		assert.Equal(t, 0, pos.Col, "Cursor should be at column 0")
 		
@@ -180,12 +180,12 @@ func TestTUICursor_BasicMovement(t *testing.T) {
 	cursor := editor.GetCursor()
 	
 	// Test cursor movement
-	cursor.MoveRight()
-	cursor.MoveRight()
-	cursor.MoveDown()
+	editor.MoveCursorRight()
+	editor.MoveCursorRight()
+	editor.MoveCursorDown()
 	
 	// Verify cursor position
-	pos := cursor.GetPosition()
+	pos := cursor.GetBufferPos()
 	assert.Equal(t, 1, pos.Line, "Cursor should be on line 1 after moving down")
 	assert.Equal(t, 2, pos.Col, "Cursor should be at column 2 after moving right twice")
 	
