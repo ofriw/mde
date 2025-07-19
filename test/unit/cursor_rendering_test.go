@@ -50,15 +50,21 @@ func TestCursor_RenderingAtPosition00(t *testing.T) {
 	// Create content that should show cursor on first character
 	content := "Hello World"
 	
-	// Create editor with content
+	// Create editor with content and disable line numbers for this test
 	editor := ast.NewEditorWithContent(content)
+	editor.ToggleLineNumbers() // Turn off line numbers since they're on by default
 	
 	// Verify cursor is at (0,0)
 	pos := editor.GetCursor().GetBufferPos()
 	require.Equal(t, ast.BufferPos{Line: 0, Col: 0}, pos)
 	
-	// Create terminal renderer
+	// Create terminal renderer and configure to match editor settings
 	renderer := renderers.NewTerminalRenderer()
+	err := renderer.Configure(map[string]interface{}{
+		"showLineNumbers":  editor.ShowLineNumbers(),
+		"lineNumberWidth": editor.GetLineNumberWidth(),
+	})
+	require.NoError(t, err)
 	
 	// Create rendered line
 	renderedLine := plugin.RenderedLine{
@@ -102,9 +108,9 @@ func TestCursor_RenderingAtPosition00_WithLineNumbers(t *testing.T) {
 	// Create content that should show cursor on first character
 	content := "Hello World"
 	
-	// Create editor with content and enable line numbers
+	// Create editor with content (line numbers are on by default)
 	editor := ast.NewEditorWithContent(content)
-	editor.ToggleLineNumbers()
+	// Line numbers are now on by default, so no need to toggle
 	
 	// Verify cursor is at (0,0)
 	pos := editor.GetCursor().GetBufferPos()
@@ -191,16 +197,21 @@ func stripAnsiEscapes(s string) string {
 // TestCursor_VisibilityOnEmptyLine validates cursor visibility on empty lines.
 // Empty line with cursor at (0,0) should show "█" at position 0.
 func TestCursor_VisibilityOnEmptyLine(t *testing.T) {
-	// Create editor with empty line
+	// Create editor with empty line and disable line numbers for this test
 	editor := ast.NewEditorWithContent("")
+	editor.ToggleLineNumbers() // Turn off line numbers since they're on by default
 	
 	// Verify cursor is at (0,0) on empty line
 	pos := editor.GetCursor().GetBufferPos()
 	require.Equal(t, ast.BufferPos{Line: 0, Col: 0}, pos, "Cursor should be at (0,0) on empty line")
 	
-	// Create renderer
+	// Create renderer and configure to match editor settings
 	renderer := renderers.NewTerminalRenderer()
-	
+	err := renderer.Configure(map[string]interface{}{
+		"showLineNumbers":  editor.ShowLineNumbers(),
+		"lineNumberWidth": editor.GetLineNumberWidth(),
+	})
+	require.NoError(t, err)
 	
 	// Render empty document
 	doc := editor.GetDocument()
@@ -225,6 +236,7 @@ func TestCursor_VisibilityOnEmptyLine(t *testing.T) {
 func TestCursor_VisibilityAtEndOfLine(t *testing.T) {
 	content := "Hello"
 	editor := ast.NewEditorWithContent(content)
+	editor.ToggleLineNumbers() // Turn off line numbers since they're on by default
 	
 	// Move cursor to end of line
 	editor.GetCursor().SetBufferPos(ast.BufferPos{Line: 0, Col: 5}) // After 'o'
@@ -233,9 +245,13 @@ func TestCursor_VisibilityAtEndOfLine(t *testing.T) {
 	pos := editor.GetCursor().GetBufferPos()
 	require.Equal(t, ast.BufferPos{Line: 0, Col: 5}, pos, "Cursor should be at end of line")
 	
-	// Create renderer
+	// Create renderer and configure to match editor settings
 	renderer := renderers.NewTerminalRenderer()
-	
+	err := renderer.Configure(map[string]interface{}{
+		"showLineNumbers":  editor.ShowLineNumbers(),
+		"lineNumberWidth": editor.GetLineNumberWidth(),
+	})
+	require.NoError(t, err)
 	
 	// Render document
 	doc := editor.GetDocument()
@@ -263,9 +279,9 @@ func TestCursor_VisibilityAtEndOfLine(t *testing.T) {
 // TestCursor_VisibilityWithLineNumbers validates cursor visibility with line numbers.
 // Empty line with line numbers should show "   1 │ █".
 func TestCursor_VisibilityWithLineNumbers(t *testing.T) {
-	// Create editor with empty line and line numbers
+	// Create editor with empty line (line numbers are on by default)
 	editor := ast.NewEditorWithContent("")
-	editor.ToggleLineNumbers()
+	// Line numbers are now on by default, so no need to toggle
 	
 	// Verify cursor is at (0,0)
 	pos := editor.GetCursor().GetBufferPos()

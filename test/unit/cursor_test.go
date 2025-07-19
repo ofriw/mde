@@ -127,6 +127,7 @@ func TestCursor_Selection(t *testing.T) {
 
 func TestCursor_ScreenPosition(t *testing.T) {
 	editor := ast.NewEditorWithContent("hello\nworld")
+	editor.ToggleLineNumbers() // Turn off line numbers since they're on by default
 	cursor := editor.GetCursor()
 	
 	// Test screen position calculation

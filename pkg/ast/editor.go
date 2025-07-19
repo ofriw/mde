@@ -23,17 +23,30 @@ func (e *Editor) GetViewport() *Viewport {
 	return e.viewport
 }
 
+// calculateLineNumberWidth computes the display width needed for line numbers
+func calculateLineNumberWidth(doc *Document) int {
+	maxLines := doc.LineCount()
+	if maxLines == 0 {
+		maxLines = 1 // Minimum for empty documents
+	}
+	digits := len(fmt.Sprintf("%d", maxLines))
+	formatStr := fmt.Sprintf("%%%dd │ ", digits)
+	sample := fmt.Sprintf(formatStr, maxLines)
+	return utf8.RuneCountInString(sample)
+}
+
 // NewEditor creates a new editor with an empty document
 func NewEditor() *Editor {
 	doc := NewEmptyDocument()
-	viewport := NewViewport(0, 0, 80, 24, 0, 4) // Default: no line numbers, 4-space tabs
+	lineNumberWidth := calculateLineNumberWidth(doc)
+	viewport := NewViewport(0, 0, 80, 24, lineNumberWidth, 4) // Default: with line numbers, 4-space tabs
 	cursorManager := NewCursorManager(viewport, doc)
 	
 	return &Editor{
 		document:      doc,
 		cursorManager: cursorManager,
 		clipboard:     "",
-		lineNumbers:   false,
+		lineNumbers:   true,
 		viewport:      viewport,
 	}
 }
@@ -41,14 +54,15 @@ func NewEditor() *Editor {
 // NewEditorWithContent creates a new editor with the given content
 func NewEditorWithContent(content string) *Editor {
 	doc := NewDocument(content)
-	viewport := NewViewport(0, 0, 80, 24, 0, 4) // Default: no line numbers, 4-space tabs
+	lineNumberWidth := calculateLineNumberWidth(doc)
+	viewport := NewViewport(0, 0, 80, 24, lineNumberWidth, 4) // Default: with line numbers, 4-space tabs
 	cursorManager := NewCursorManager(viewport, doc)
 	
 	return &Editor{
 		document:      doc,
 		cursorManager: cursorManager,
 		clipboard:     "",
-		lineNumbers:   false,
+		lineNumbers:   true,
 		viewport:      viewport,
 	}
 }

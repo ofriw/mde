@@ -209,7 +209,7 @@ func TestCursorFixes_ScreenPositionEdgeCasesFixed(t *testing.T) {
 		expectedCol := tc.pos.Col - viewport.GetLeftColumn()
 		
 		if editor.ShowLineNumbers() {
-			expectedCol += 6
+			expectedCol += editor.GetLineNumberWidth()
 		}
 		
 		assert.Equal(t, expectedRow, screenRow, "Screen row calculation for %s", tc.desc)
@@ -259,7 +259,7 @@ func TestCursorFixes_ViewportSynchronizationFixed(t *testing.T) {
 		expectedScreenCol := tc.pos.Col - viewport.GetLeftColumn()
 		
 		if editor.ShowLineNumbers() {
-			expectedScreenCol += 6
+			expectedScreenCol += editor.GetLineNumberWidth()
 		}
 		
 		assert.Equal(t, expectedScreenRow, screenRow, "Forward transformation row for %s", tc.desc)

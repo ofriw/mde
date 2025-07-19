@@ -30,7 +30,7 @@ make install    # Install locally
 **Key Behaviors to Verify**:
 - Cursor position (0,0) after file load
 - Content length preserved in rendering
-- Line number offset = 6 characters
+- Line number offset = calculated dynamically based on document line count
 - Cursor visible in TUI output
 
 **User Confirmation Required For**:

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/ofri/mde/internal/plugins"
 	"github.com/ofri/mde/internal/tui"
 	"github.com/ofri/mde/pkg/plugin"
 	"github.com/ofri/mde/test/testutils"
@@ -33,6 +34,10 @@ func TestFileOpening_RealFileLoadWorkflow(t *testing.T) {
 	// CRITICAL TEST: This test reproduces the exact bug by using the real file loading workflow
 	// This bypasses the testutils.LoadContentIntoModel helper which masks the bug
 	
+	// Initialize plugins once for the entire test
+	err := plugins.InitializePlugins()
+	require.NoError(t, err, "Should initialize plugins successfully")
+	
 	t.Run("cursor position after real file load", func(t *testing.T) {
 		// Create a temporary file
 		content := "Hello World\nSecond Line\nThird Line"
@@ -53,24 +58,25 @@ func TestFileOpening_RealFileLoadWorkflow(t *testing.T) {
 		assert.Equal(t, 0, pos.Line, "Cursor should be at line 0 after file load")
 		assert.Equal(t, 0, pos.Col, "Cursor should be at column 0 after file load")
 		
-		// Test the screen position calculation
+		// Test the screen position calculation (line numbers are on by default)
 		screenRow, screenCol := func() (int, int) {
 		screenPos, err := editor.GetCursor().GetScreenPos()
 		if err != nil { return -1, -1 }
 		return screenPos.Row, screenPos.Col
 	}()
 		assert.Equal(t, 0, screenRow, "Screen row should be 0 for cursor at (0,0)")
-		assert.Equal(t, 0, screenCol, "Screen col should be 0 for cursor at (0,0)")
+		expectedCol := editor.GetLineNumberWidth() // Line numbers are on by default
+		assert.Equal(t, expectedCol, screenCol, "Screen col should include line number offset")
 		
-		// Test with line numbers enabled
-		editor.ToggleLineNumbers()
+		// Test with line numbers disabled
+		editor.ToggleLineNumbers() // Turn OFF line numbers since they're on by default
 		screenRow, screenCol = func() (int, int) {
 		screenPos, err := editor.GetCursor().GetScreenPos()
 		if err != nil { return -1, -1 }
 		return screenPos.Row, screenPos.Col
 	}()
-		assert.Equal(t, 0, screenRow, "Screen row should be 0 with line numbers")
-		assert.Equal(t, editor.GetLineNumberWidth(), screenCol, "Screen col should match calculated line number width")
+		assert.Equal(t, 0, screenRow, "Screen row should be 0 without line numbers")
+		assert.Equal(t, 0, screenCol, "Screen col should be 0 without line numbers")
 	})
 	
 	t.Run("cursor rendering after real file load", func(t *testing.T) {
@@ -193,14 +199,15 @@ func TestFileOpening_RealFileLoadWorkflow(t *testing.T) {
 		assert.Equal(t, 0, pos.Line, "Cursor should be at line 0 in empty file")
 		assert.Equal(t, 0, pos.Col, "Cursor should be at column 0 in empty file")
 		
-		// Test screen position
+		// Test screen position (line numbers are on by default)
 		screenRow, screenCol := func() (int, int) {
 		screenPos, err := editor.GetCursor().GetScreenPos()
 		if err != nil { return -1, -1 }
 		return screenPos.Row, screenPos.Col
 	}()
 		assert.Equal(t, 0, screenRow, "Screen row should be 0 for empty file")
-		assert.Equal(t, 0, screenCol, "Screen col should be 0 for empty file")
+		expectedCol := editor.GetLineNumberWidth() // Line numbers are on by default
+		assert.Equal(t, expectedCol, screenCol, "Screen col should include line number offset for empty file")
 	})
 }
 

@@ -46,7 +46,7 @@ func NewTerminalRenderer() *TerminalRenderer {
 		config: plugin.RendererConfig{
 			MaxWidth:        80,
 			TabWidth:        4,
-			ShowLineNumbers: false,
+			ShowLineNumbers: true,
 			PreviewMode:     false,
 			Options:         make(map[string]interface{}),
 		},

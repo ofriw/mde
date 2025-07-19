@@ -19,10 +19,12 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/ofri/mde/internal/plugins"
 	"github.com/ofri/mde/internal/tui"
 	"github.com/ofri/mde/pkg/plugin"
 	"github.com/ofri/mde/test/testutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTUICursor_InitialPositionGhostLineBug validates full TUI cursor rendering behavior.
@@ -48,6 +50,10 @@ import (
 func TestTUICursor_InitialPositionGhostLineBug(t *testing.T) {
 	// CRITICAL TEST: This test reproduces the exact bug reported
 	// When opening a file, cursor should be at first character, not at end with ghost line
+	
+	// Initialize plugins once for the entire test
+	err := plugins.InitializePlugins()
+	require.NoError(t, err, "Should initialize plugins successfully")
 	
 	t.Run("cursor at start without ghost line", func(t *testing.T) {
 		model := tui.New()
@@ -110,8 +116,7 @@ func TestTUICursor_InitialPositionGhostLineBug(t *testing.T) {
 		testutils.SetModelSize(model, 80, 24)
 		testutils.LoadContentIntoModel(model, "Hello World\nSecond Line")
 		
-		// Enable line numbers before testing
-		model.GetEditor().ToggleLineNumbers()
+		// Line numbers are now on by default, so no need to toggle
 		
 		// Ensure renderer configuration is synchronized with editor
 		registry := plugin.GetRegistry()
@@ -157,6 +162,10 @@ func TestTUICursor_InitialPositionGhostLineBug(t *testing.T) {
 }
 
 func TestTUICursor_BasicMovement(t *testing.T) {
+	// Initialize plugins for TUI rendering
+	err := plugins.InitializePlugins()
+	require.NoError(t, err, "Should initialize plugins successfully")
+	
 	// Create a test model with content
 	model := tui.New()
 	testutils.SetModelSize(model, 80, 24)
