@@ -1,7 +1,7 @@
 # MDE - Markdown Editor CLI Specification
 
 ## Executive Summary
-Production-ready terminal markdown editor built in Go with plugin-based architecture for parsing, rendering, and theming. Designed for LLM-driven development with emphasis on modularity and extensibility.
+Production-ready terminal markdown editor built in Go with plugin-based architecture for parsing and rendering. Designed for LLM-driven development with emphasis on modularity and extensibility.
 
 ## Architecture Overview
 
@@ -16,15 +16,11 @@ graph TB
     subgraph "Internal Plugins"
         D --> E[Parser Plugins]
         D --> F[Renderer Plugins]
-        D --> G[Theme Plugins]
         
         E --> E1[CommonMark Parser]
         E --> E2[GFM Parser]
         
         F --> F1[Terminal Renderer]
-        
-        G --> G1[Light Theme]
-        G --> G2[Dark Theme]
     end
     
     subgraph "Infrastructure"
@@ -71,17 +67,8 @@ type ParserPlugin interface {
 ```go
 type RendererPlugin interface {
     Name() string
-    Render(node ast.Node, theme Theme) string
+    Render(node ast.Node) string
     SupportedNodeTypes() []ast.NodeType
-}
-```
-
-#### Theme Plugin Interface
-```go
-type Theme interface {
-    Name() string
-    GetStyle(element string) Style
-    Palette() ColorPalette
 }
 ```
 
@@ -94,7 +81,6 @@ type Theme interface {
 type PluginRegistry struct {
     parsers   map[string]ParserPlugin
     renderers map[string]RendererPlugin
-    themes    map[string]Theme
 }
 
 // Built-in plugins registered at startup
@@ -102,8 +88,6 @@ func init() {
     registry.RegisterParser("commonmark", &CommonMarkParser{})
     registry.RegisterParser("gfm", &GFMParser{})
     registry.RegisterRenderer("terminal", &TerminalRenderer{})
-    registry.RegisterTheme("light", &LightTheme{})
-    registry.RegisterTheme("dark", &DarkTheme{})
 }
 ```
 
@@ -147,7 +131,6 @@ func init() {
   - Ctrl+G: Go to line
 - **View**:
   - Ctrl+P: Preview toggle
-  - Ctrl+T: Theme switch
   - Ctrl+L: Line numbers toggle
 
 ### 3. Rendering Pipeline
@@ -159,7 +142,6 @@ graph LR
     D --> E[Styled Output]
     E --> F[Terminal Display]
     
-    G[Theme Plugin] --> D
 ```
 
 ## File Structure
@@ -172,13 +154,11 @@ mde/
 │   ├── plugins/         # Plugin implementations
 │   │   ├── parsers/
 │   │   ├── renderers/
-│   │   └── themes/
 │   ├── config/          # Configuration
 │   └── utils/           # Utilities
 ├── pkg/                 # Public APIs
 │   ├── plugin/          # Plugin interfaces
 │   ├── ast/             # AST definitions
-│   └── theme/           # Theme types
 ├── testdata/           # Test fixtures
 └── scripts/            # Build/test scripts
 ```
@@ -188,7 +168,7 @@ mde/
 No configuration files. MDE uses sensible defaults:
 - Tab width: 4 spaces
 - Line numbers: enabled
-- Theme: dark
+- Terminal color inheritance (ANSI colors)
 
 All settings are optimized for markdown editing out of the box.
 
@@ -269,14 +249,14 @@ make install    # Install locally
 1. Basic editor with micro-style keybindings
 2. CommonMark parsing
 3. Terminal rendering with syntax highlighting
-4. Light/dark themes
+4. ANSI color codes for terminal compatibility
 5. File save/load
 6. Basic configuration
 7. Help bar with shortcuts
 8. Mouse support
 
 ## Future Roadmap
-- v1.1: GFM support, more themes
+- v1.1: GFM support, additional renderers
 - v1.2: Table editing improvements
 - v2.0: Mermaid diagrams (built-in)
 - v2.1: Export to HTML/PDF

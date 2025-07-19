@@ -4,8 +4,7 @@ Internal plugins compiled into binary. No dynamic loading in v1.
 
 ## Plugin Types
 - **Parsers**: Convert markdown to AST (goldmark-based)
-- **Renderers**: Convert AST to styled output  
-- **Themes**: Provide styling for elements
+- **Renderers**: Convert AST to styled output using terminal ANSI colors
 
 ## Adding Plugins
 1. Implement interface in `pkg/plugin/`
@@ -16,6 +15,5 @@ Internal plugins compiled into binary. No dynamic loading in v1.
 ## Interfaces
 ```go
 ParserPlugin.Parse(content string) (ast.Node, error)
-RendererPlugin.Render(node ast.Node, theme Theme) string
-Theme.GetStyle(element string) Style
+RendererPlugin.Render(node ast.Node) ([]RenderedLine, error)
 ```

@@ -1,6 +1,6 @@
 # MDE - Markdown Editor
 
-Terminal markdown editor with plugin architecture for parsing, rendering, and theming.
+Terminal markdown editor with plugin architecture for parsing and rendering. Uses ANSI escape sequences for styling.
 
 ## Architecture
 - **Bubble Tea** TUI with Elm Architecture - single flat Model
