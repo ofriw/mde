@@ -4,17 +4,11 @@ import (
 	"fmt"
 	"github.com/ofri/mde/internal/plugins/parsers"
 	"github.com/ofri/mde/internal/plugins/renderers"
-	"github.com/ofri/mde/internal/plugins/themes"
 	"github.com/ofri/mde/pkg/plugin"
 )
 
 // InitializePlugins initializes all built-in plugins
 func InitializePlugins() error {
-	// Initialize themes
-	if err := initializeThemes(); err != nil {
-		return fmt.Errorf("failed to initialize themes: %w", err)
-	}
-	
 	// Initialize renderers
 	if err := initializeRenderers(); err != nil {
 		return fmt.Errorf("failed to initialize renderers: %w", err)
@@ -28,25 +22,6 @@ func InitializePlugins() error {
 	// Set default plugins
 	if err := setDefaultPlugins(); err != nil {
 		return fmt.Errorf("failed to set default plugins: %w", err)
-	}
-	
-	return nil
-}
-
-// initializeThemes registers all built-in themes
-func initializeThemes() error {
-	registry := plugin.GetRegistry()
-	
-	// Register dark theme
-	darkTheme := themes.NewDarkTheme()
-	if err := registry.RegisterTheme(darkTheme.Name(), darkTheme); err != nil {
-		return fmt.Errorf("failed to register dark theme: %w", err)
-	}
-	
-	// Register light theme
-	lightTheme := themes.NewLightTheme()
-	if err := registry.RegisterTheme(lightTheme.Name(), lightTheme); err != nil {
-		return fmt.Errorf("failed to register light theme: %w", err)
 	}
 	
 	return nil
@@ -92,11 +67,6 @@ func initializeParsers() error {
 func setDefaultPlugins() error {
 	registry := plugin.GetRegistry()
 	
-	// Set default theme
-	if err := registry.SetDefaultTheme("dark"); err != nil {
-		return fmt.Errorf("failed to set default theme: %w", err)
-	}
-	
 	// Set default renderer (always terminal for now)
 	if err := registry.SetDefaultRenderer("terminal"); err != nil {
 		return fmt.Errorf("failed to set default renderer: %w", err)
@@ -117,7 +87,6 @@ func GetPluginStatus() map[string]interface{} {
 	return map[string]interface{}{
 		"parsers":   registry.ListParsers(),
 		"renderers": registry.ListRenderers(),
-		"themes":    registry.ListThemes(),
 	}
 }
 

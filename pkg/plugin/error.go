@@ -7,7 +7,7 @@ type PluginError struct {
 	// Plugin name
 	Plugin string
 	
-	// Plugin type (parser, renderer, theme)
+	// Plugin type (parser, renderer)
 	Type string
 	
 	// Operation that failed

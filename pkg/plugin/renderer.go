@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 	"github.com/ofri/mde/pkg/ast"
-	"github.com/ofri/mde/pkg/theme"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // RendererPlugin defines the interface for document renderers
@@ -11,14 +11,14 @@ type RendererPlugin interface {
 	// Name returns the plugin name
 	Name() string
 	
-	// Render renders the document with the given theme
-	Render(ctx context.Context, doc *ast.Document, theme theme.Theme) ([]RenderedLine, error)
+	// Render renders the document
+	Render(ctx context.Context, doc *ast.Document) ([]RenderedLine, error)
 	
 	// RenderPreview renders a preview of the document
-	RenderPreview(ctx context.Context, doc *ast.Document, theme theme.Theme) ([]RenderedLine, error)
+	RenderPreview(ctx context.Context, doc *ast.Document) ([]RenderedLine, error)
 	
 	// RenderLine renders a single line with syntax highlighting
-	RenderLine(ctx context.Context, line string, tokens []ast.Token, theme theme.Theme) (RenderedLine, error)
+	RenderLine(ctx context.Context, line string, tokens []ast.Token) (RenderedLine, error)
 	
 	// Configure configures the renderer with options
 	Configure(options map[string]interface{}) error
@@ -45,7 +45,59 @@ type StyleRange struct {
 	End int
 	
 	// Style to apply
-	Style theme.Style
+	Style Style
+}
+
+// Style represents basic styling information using ANSI colors
+type Style struct {
+	// Foreground color (ANSI color code 0-15)
+	Foreground string
+	
+	// Background color (ANSI color code 0-15)
+	Background string
+	
+	// Bold text
+	Bold bool
+	
+	// Italic text
+	Italic bool
+	
+	// Underline text
+	Underline bool
+	
+	// Strikethrough text
+	Strikethrough bool
+}
+
+// ToLipgloss converts a Style to a lipgloss.Style
+func (s Style) ToLipgloss() lipgloss.Style {
+	style := lipgloss.NewStyle()
+	
+	if s.Foreground != "" {
+		style = style.Foreground(lipgloss.Color(s.Foreground))
+	}
+	
+	if s.Background != "" {
+		style = style.Background(lipgloss.Color(s.Background))
+	}
+	
+	if s.Bold {
+		style = style.Bold(true)
+	}
+	
+	if s.Italic {
+		style = style.Italic(true)
+	}
+	
+	if s.Underline {
+		style = style.Underline(true)
+	}
+	
+	if s.Strikethrough {
+		style = style.Strikethrough(true)
+	}
+	
+	return style
 }
 
 // RendererConfig holds configuration for renderers

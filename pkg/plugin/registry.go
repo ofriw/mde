@@ -3,7 +3,6 @@ package plugin
 import (
 	"fmt"
 	"sync"
-	"github.com/ofri/mde/pkg/theme"
 )
 
 // Registry manages plugin registration and discovery
@@ -13,12 +12,10 @@ type Registry struct {
 	// Registered plugins
 	parsers   map[string]ParserPlugin
 	renderers map[string]RendererPlugin
-	themes    map[string]theme.Theme
 	
 	// Default plugins
 	defaultParser   string
 	defaultRenderer string
-	defaultTheme    string
 }
 
 // NewRegistry creates a new plugin registry
@@ -26,7 +23,6 @@ func NewRegistry() *Registry {
 	return &Registry{
 		parsers:   make(map[string]ParserPlugin),
 		renderers: make(map[string]RendererPlugin),
-		themes:    make(map[string]theme.Theme),
 	}
 }
 
@@ -68,24 +64,6 @@ func (r *Registry) RegisterRenderer(name string, plugin RendererPlugin) error {
 	return nil
 }
 
-// RegisterTheme registers a theme plugin
-func (r *Registry) RegisterTheme(name string, theme theme.Theme) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	
-	if _, exists := r.themes[name]; exists {
-		return fmt.Errorf("theme '%s' already registered", name)
-	}
-	
-	r.themes[name] = theme
-	
-	// Set as default if it's the first theme
-	if len(r.themes) == 1 {
-		r.defaultTheme = name
-	}
-	
-	return nil
-}
 
 // GetParser retrieves a parser plugin by name
 func (r *Registry) GetParser(name string) (ParserPlugin, error) {
@@ -113,18 +91,6 @@ func (r *Registry) GetRenderer(name string) (RendererPlugin, error) {
 	return plugin, nil
 }
 
-// GetTheme retrieves a theme by name
-func (r *Registry) GetTheme(name string) (theme.Theme, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	
-	themePlugin, exists := r.themes[name]
-	if !exists {
-		return nil, fmt.Errorf("theme '%s' not found", name)
-	}
-	
-	return themePlugin, nil
-}
 
 // GetDefaultParser returns the default parser plugin
 func (r *Registry) GetDefaultParser() (ParserPlugin, error) {
@@ -150,17 +116,6 @@ func (r *Registry) GetDefaultRenderer() (RendererPlugin, error) {
 	return r.renderers[r.defaultRenderer], nil
 }
 
-// GetDefaultTheme returns the default theme
-func (r *Registry) GetDefaultTheme() (theme.Theme, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	
-	if r.defaultTheme == "" {
-		return nil, fmt.Errorf("no default theme registered")
-	}
-	
-	return r.themes[r.defaultTheme], nil
-}
 
 // SetDefaultParser sets the default parser plugin
 func (r *Registry) SetDefaultParser(name string) error {
@@ -188,18 +143,6 @@ func (r *Registry) SetDefaultRenderer(name string) error {
 	return nil
 }
 
-// SetDefaultTheme sets the default theme
-func (r *Registry) SetDefaultTheme(name string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	
-	if _, exists := r.themes[name]; !exists {
-		return fmt.Errorf("theme '%s' not registered", name)
-	}
-	
-	r.defaultTheme = name
-	return nil
-}
 
 // ListParsers returns a list of registered parser names
 func (r *Registry) ListParsers() []string {
@@ -227,18 +170,6 @@ func (r *Registry) ListRenderers() []string {
 	return names
 }
 
-// ListThemes returns a list of registered theme names
-func (r *Registry) ListThemes() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	
-	names := make([]string, 0, len(r.themes))
-	for name := range r.themes {
-		names = append(names, name)
-	}
-	
-	return names
-}
 
 // Global registry instance
 var globalRegistry = NewRegistry()
@@ -253,10 +184,6 @@ func RegisterRenderer(name string, plugin RendererPlugin) error {
 	return globalRegistry.RegisterRenderer(name, plugin)
 }
 
-// RegisterTheme registers a theme globally
-func RegisterTheme(name string, theme theme.Theme) error {
-	return globalRegistry.RegisterTheme(name, theme)
-}
 
 // GetRegistry returns the global registry instance
 func GetRegistry() *Registry {

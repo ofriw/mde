@@ -7,16 +7,15 @@
 // # Architecture
 //
 // The plugin system serves as an internal code organization pattern that:
-//   - Separates concerns between parsing, rendering, and theming
+//   - Separates concerns between parsing and rendering
 //   - Provides clear interfaces for different components
 //   - Enables compile-time modularity without runtime complexity
 //
 // # Plugin Types
 //
-// Three types of plugins are supported:
+// Two types of plugins are supported:
 //   - Parser plugins: Convert raw text to AST with syntax tokens
-//   - Renderer plugins: Convert AST to styled output for display
-//   - Theme plugins: Provide color schemes and styling information
+//   - Renderer plugins: Convert AST to terminal output with ANSI colors
 //
 // # Error Handling
 //
@@ -34,7 +33,6 @@
 //	    registry := plugin.GetRegistry()
 //	    registry.RegisterParser("markdown", &markdownParser{})
 //	    registry.RegisterRenderer("terminal", &terminalRenderer{})
-//	    registry.RegisterTheme("default", &defaultTheme{})
 //	}
 //
 // # Usage
