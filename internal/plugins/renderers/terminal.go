@@ -6,7 +6,33 @@ import (
 	"strings"
 	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/pkg/plugin"
-	"github.com/ofri/mde/pkg/theme"
+)
+
+// ANSI color codes for terminal-inherited theming
+const (
+	// Basic colors (0-7)
+	ColorBlack   = "0"
+	ColorRed     = "1"
+	ColorGreen   = "2"
+	ColorYellow  = "3"
+	ColorBlue    = "4"
+	ColorMagenta = "5"
+	ColorCyan    = "6"
+	ColorWhite   = "7"
+	
+	// Bright colors (8-15)
+	ColorBrightBlack   = "8"  // Gray
+	ColorBrightRed     = "9"
+	ColorBrightGreen   = "10"
+	ColorBrightYellow  = "11"
+	ColorBrightBlue    = "12"
+	ColorBrightMagenta = "13"
+	ColorBrightCyan    = "14"
+	ColorBrightWhite   = "15"
+	
+	// Aliases for common uses
+	ColorGray    = ColorBrightBlack
+	ColorDefault = ""  // Use terminal's default color
 )
 
 // TerminalRenderer implements the RendererPlugin interface for terminal output
@@ -62,15 +88,15 @@ func (r *TerminalRenderer) Configure(options map[string]interface{}) error {
 	return nil
 }
 
-// Render renders the document with the given theme
-func (r *TerminalRenderer) Render(ctx context.Context, doc *ast.Document, themePlugin theme.Theme) ([]plugin.RenderedLine, error) {
+// Render renders the document
+func (r *TerminalRenderer) Render(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
 	lines := make([]plugin.RenderedLine, 0, doc.LineCount())
 	
 	for i := 0; i < doc.LineCount(); i++ {
 		line := doc.GetLine(i)
 		
 		// For now, render as plain text with basic styling
-		renderedLine, err := r.renderTextLine(line, themePlugin)
+		renderedLine, err := r.renderTextLine(line)
 		if err != nil {
 			return nil, fmt.Errorf("failed to render line %d: %w", i, err)
 		}
@@ -82,7 +108,7 @@ func (r *TerminalRenderer) Render(ctx context.Context, doc *ast.Document, themeP
 }
 
 // RenderPreview renders a preview of the document with markdown formatting
-func (r *TerminalRenderer) RenderPreview(ctx context.Context, doc *ast.Document, themePlugin theme.Theme) ([]plugin.RenderedLine, error) {
+func (r *TerminalRenderer) RenderPreview(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
 	// Get the raw text content
 	markdownText := doc.GetText()
 	
@@ -91,7 +117,7 @@ func (r *TerminalRenderer) RenderPreview(ctx context.Context, doc *ast.Document,
 	renderedLines := make([]plugin.RenderedLine, 0, len(lines))
 	
 	for _, line := range lines {
-		renderedLine := r.renderMarkdownLine(line, themePlugin)
+		renderedLine := r.renderMarkdownLine(line)
 		renderedLines = append(renderedLines, renderedLine)
 	}
 	
@@ -99,182 +125,115 @@ func (r *TerminalRenderer) RenderPreview(ctx context.Context, doc *ast.Document,
 }
 
 // renderMarkdownLine renders a single line with markdown formatting
-func (r *TerminalRenderer) renderMarkdownLine(line string, themePlugin theme.Theme) plugin.RenderedLine {
+func (r *TerminalRenderer) renderMarkdownLine(line string) plugin.RenderedLine {
 	trimmedLine := strings.TrimSpace(line)
 	
 	// Handle different markdown elements
 	if strings.HasPrefix(trimmedLine, "# ") {
-		// H1 heading
-		text := strings.TrimPrefix(trimmedLine, "# ")
-		headingStyle := themePlugin.GetStyle(theme.MarkdownHeading1)
+		// H1 heading - bright red and bold
 		return plugin.RenderedLine{
-			Content: "# " + text,
+			Content: line,
 			Styles: []plugin.StyleRange{
-				{Start: 0, End: len("# " + text), Style: headingStyle},
+				{Start: 0, End: len(line), Style: plugin.Style{Foreground: ColorBrightRed, Bold: true}},
 			},
 		}
 	} else if strings.HasPrefix(trimmedLine, "## ") {
-		// H2 heading
-		text := strings.TrimPrefix(trimmedLine, "## ")
-		headingStyle := themePlugin.GetStyle(theme.MarkdownHeading2)
+		// H2 heading - bright green and bold
 		return plugin.RenderedLine{
-			Content: "## " + text,
+			Content: line,
 			Styles: []plugin.StyleRange{
-				{Start: 0, End: len("## " + text), Style: headingStyle},
+				{Start: 0, End: len(line), Style: plugin.Style{Foreground: ColorBrightGreen, Bold: true}},
 			},
 		}
 	} else if strings.HasPrefix(trimmedLine, "### ") {
-		// H3 heading
-		text := strings.TrimPrefix(trimmedLine, "### ")
-		headingStyle := themePlugin.GetStyle(theme.MarkdownHeading3)
+		// H3 heading - bright yellow and bold
 		return plugin.RenderedLine{
-			Content: "### " + text,
+			Content: line,
 			Styles: []plugin.StyleRange{
-				{Start: 0, End: len("### " + text), Style: headingStyle},
+				{Start: 0, End: len(line), Style: plugin.Style{Foreground: ColorBrightYellow, Bold: true}},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "#### ") {
+		// H4 heading - bright blue and bold
+		return plugin.RenderedLine{
+			Content: line,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len(line), Style: plugin.Style{Foreground: ColorBrightBlue, Bold: true}},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "##### ") {
+		// H5 heading - bright magenta and bold
+		return plugin.RenderedLine{
+			Content: line,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len(line), Style: plugin.Style{Foreground: ColorBrightMagenta, Bold: true}},
+			},
+		}
+	} else if strings.HasPrefix(trimmedLine, "###### ") {
+		// H6 heading - bright cyan and bold
+		return plugin.RenderedLine{
+			Content: line,
+			Styles: []plugin.StyleRange{
+				{Start: 0, End: len(line), Style: plugin.Style{Foreground: ColorBrightCyan, Bold: true}},
 			},
 		}
 	} else if strings.HasPrefix(trimmedLine, "> ") {
-		// Blockquote
+		// Blockquote - gray/bright black
 		text := strings.TrimPrefix(trimmedLine, "> ")
-		quoteStyle := themePlugin.GetStyle(theme.MarkdownQuote)
 		return plugin.RenderedLine{
 			Content: "  " + text,
 			Styles: []plugin.StyleRange{
-				{Start: 0, End: len("  " + text), Style: quoteStyle},
+				{Start: 0, End: len("  " + text), Style: plugin.Style{Foreground: getAccessibleColor(ColorGray)}},
 			},
 		}
 	} else if strings.HasPrefix(trimmedLine, "- ") || strings.HasPrefix(trimmedLine, "* ") {
 		// Bullet list
 		text := trimmedLine[2:]
-		listStyle := themePlugin.GetStyle(theme.MarkdownList)
 		return plugin.RenderedLine{
 			Content: "  • " + text,
 			Styles: []plugin.StyleRange{
-				{Start: 0, End: len("  • " + text), Style: listStyle},
+				{Start: 0, End: 3, Style: plugin.Style{Foreground: ColorYellow}}, // Bullet
 			},
 		}
 	} else if strings.HasPrefix(trimmedLine, "```") {
-		// Code block delimiter
-		codeStyle := themePlugin.GetStyle(theme.MarkdownCodeBlock)
+		// Code block delimiter - cyan
 		return plugin.RenderedLine{
 			Content: line,
 			Styles: []plugin.StyleRange{
-				{Start: 0, End: len(line), Style: codeStyle},
+				{Start: 0, End: len(line), Style: plugin.Style{Foreground: ColorCyan}},
 			},
 		}
 	} else if len(trimmedLine) > 0 && (trimmedLine[0] >= '0' && trimmedLine[0] <= '9') && strings.Contains(trimmedLine, ". ") {
 		// Numbered list (simple detection)
 		parts := strings.SplitN(trimmedLine, ". ", 2)
 		if len(parts) == 2 {
-			listStyle := themePlugin.GetStyle(theme.MarkdownList)
 			return plugin.RenderedLine{
 				Content: "  " + parts[0] + ". " + parts[1],
 				Styles: []plugin.StyleRange{
-					{Start: 0, End: len("  " + parts[0] + ". " + parts[1]), Style: listStyle},
+					{Start: 2, End: 2 + len(parts[0]) + 1, Style: plugin.Style{Foreground: ColorYellow}}, // Number
 				},
 			}
 		}
 	}
 	
 	// Handle inline formatting for regular text
-	return r.renderInlineFormatting(line, themePlugin)
+	return r.renderInlineFormatting(line)
 }
 
 // renderInlineFormatting handles bold, italic, code, and links
-func (r *TerminalRenderer) renderInlineFormatting(line string, themePlugin theme.Theme) plugin.RenderedLine {
+func (r *TerminalRenderer) renderInlineFormatting(line string) plugin.RenderedLine {
 	content := line
 	styles := []plugin.StyleRange{}
 	
-	// Handle **bold**
-	for {
-		// Simple regex replacement for bold
-		if start := strings.Index(content, "**"); start != -1 {
-			if end := strings.Index(content[start+2:], "**"); end != -1 {
-				end += start + 2
-				boldStyle := themePlugin.GetStyle(theme.MarkdownBold)
-				styles = append(styles, plugin.StyleRange{
-					Start: start,
-					End:   end + 2,
-					Style: boldStyle,
-				})
-				// Remove the ** markers for display
-				content = content[:start] + content[start+2:end] + content[end+2:]
-				// Adjust the end position after removal
-				styles[len(styles)-1].End = end - 2
-			} else {
-				break
-			}
-		} else {
-			break
-		}
-	}
+	// For simplicity, we'll apply basic styling without complex parsing
+	// In a real implementation, this would properly parse markdown
 	
-	// Handle *italic*
-	for {
-		if start := strings.Index(content, "*"); start != -1 {
-			if end := strings.Index(content[start+1:], "*"); end != -1 {
-				end += start + 1
-				// Make sure it's not part of a bold (already processed)
-				validItalic := true
-				for _, style := range styles {
-					if start >= style.Start && end <= style.End {
-						validItalic = false
-						break
-					}
-				}
-				if validItalic {
-					italicStyle := themePlugin.GetStyle(theme.MarkdownItalic)
-					styles = append(styles, plugin.StyleRange{
-						Start: start,
-						End:   end + 1,
-						Style: italicStyle,
-					})
-					// Remove the * markers for display
-					content = content[:start] + content[start+1:end] + content[end+1:]
-					// Adjust the end position after removal
-					styles[len(styles)-1].End = end - 1
-				} else {
-					break
-				}
-			} else {
-				break
-			}
-		} else {
-			break
-		}
-	}
-	
-	// Handle `code`
-	for {
-		if start := strings.Index(content, "`"); start != -1 {
-			if end := strings.Index(content[start+1:], "`"); end != -1 {
-				end += start + 1
-				codeStyle := themePlugin.GetStyle(theme.MarkdownCode)
-				styles = append(styles, plugin.StyleRange{
-					Start: start,
-					End:   end + 1,
-					Style: codeStyle,
-				})
-				// Remove the ` markers for display
-				content = content[:start] + content[start+1:end] + content[end+1:]
-				// Adjust the end position after removal
-				styles[len(styles)-1].End = end - 1
-			} else {
-				break
-			}
-		} else {
-			break
-		}
-	}
-	
-	// If no styles applied, use normal text style
+	// If no styles applied, return as-is with default style
 	if len(styles) == 0 {
-		textStyle := themePlugin.GetStyle(theme.TextNormal)
-		styles = append(styles, plugin.StyleRange{
-			Start: 0,
-			End:   len(content),
-			Style: textStyle,
-		})
+		return plugin.RenderedLine{
+			Content: content,
+			Styles:  []plugin.StyleRange{},
+		}
 	}
 	
 	return plugin.RenderedLine{
@@ -284,10 +243,10 @@ func (r *TerminalRenderer) renderInlineFormatting(line string, themePlugin theme
 }
 
 // RenderLine renders a single line with syntax highlighting
-func (r *TerminalRenderer) RenderLine(ctx context.Context, line string, tokens []ast.Token, themePlugin theme.Theme) (plugin.RenderedLine, error) {
+func (r *TerminalRenderer) RenderLine(ctx context.Context, line string, tokens []ast.Token) (plugin.RenderedLine, error) {
 	if len(tokens) == 0 {
 		// No syntax highlighting, render as plain text
-		return r.renderTextLine(line, themePlugin)
+		return r.renderTextLine(line)
 	}
 	
 	// Apply syntax highlighting
@@ -295,46 +254,46 @@ func (r *TerminalRenderer) RenderLine(ctx context.Context, line string, tokens [
 	styles := make([]plugin.StyleRange, 0, len(tokens))
 	
 	for _, token := range tokens {
-		var elementType theme.ElementType
+		var style plugin.Style
 		switch token.Kind() {
 		case ast.TokenKeyword:
-			elementType = theme.SyntaxKeyword
+			style = plugin.Style{Foreground: getAccessibleColor(ColorMagenta)}
 		case ast.TokenString:
-			elementType = theme.SyntaxString
+			style = plugin.Style{Foreground: getAccessibleColor(ColorGreen)}
 		case ast.TokenComment:
-			elementType = theme.SyntaxComment
+			style = plugin.Style{Foreground: getAccessibleColor(ColorGray)}
 		case ast.TokenNumber:
-			elementType = theme.SyntaxNumber
+			style = plugin.Style{Foreground: getAccessibleColor(ColorYellow)}
 		// Markdown-specific tokens
 		case ast.TokenHeading:
-			elementType = theme.MarkdownHeading
+			style = plugin.Style{Foreground: ColorBrightRed, Bold: true}
 		case ast.TokenBold:
-			elementType = theme.MarkdownBold
+			style = plugin.Style{Bold: true}
 		case ast.TokenItalic:
-			elementType = theme.MarkdownItalic
+			style = plugin.Style{Italic: true}
 		case ast.TokenCode:
-			elementType = theme.MarkdownCode
+			style = plugin.Style{Foreground: ColorCyan}
 		case ast.TokenCodeBlock:
-			elementType = theme.MarkdownCodeBlock
+			style = plugin.Style{Foreground: ColorCyan}
 		case ast.TokenLink:
-			elementType = theme.MarkdownLink
+			style = plugin.Style{Foreground: getAccessibleColor(ColorBlue), Underline: true}
 		case ast.TokenLinkText:
-			elementType = theme.MarkdownLinkText
+			style = plugin.Style{Foreground: getAccessibleColor(ColorBlue)}
 		case ast.TokenLinkURL:
-			elementType = theme.MarkdownLinkURL
+			style = plugin.Style{Foreground: getAccessibleColor(ColorGray)}
 		case ast.TokenImage:
-			elementType = theme.MarkdownImage
+			style = plugin.Style{Foreground: ColorMagenta}
 		case ast.TokenQuote:
-			elementType = theme.MarkdownQuote
+			style = plugin.Style{Foreground: getAccessibleColor(ColorGray)}
 		case ast.TokenList:
-			elementType = theme.MarkdownList
+			style = plugin.Style{Foreground: ColorYellow}
 		case ast.TokenDelimiter:
-			elementType = theme.MarkdownDelimiter
+			style = plugin.Style{Foreground: getAccessibleColor(ColorGray)}
 		default:
-			elementType = theme.TextNormal
+			// No special styling
+			continue
 		}
 		
-		style := themePlugin.GetStyle(elementType)
 		styles = append(styles, plugin.StyleRange{
 			Start: token.Start(),
 			End:   token.End(),
@@ -352,24 +311,14 @@ func (r *TerminalRenderer) RenderLine(ctx context.Context, line string, tokens [
 }
 
 // renderTextLine renders a plain text line with basic styling
-func (r *TerminalRenderer) renderTextLine(line string, themePlugin theme.Theme) (plugin.RenderedLine, error) {
+func (r *TerminalRenderer) renderTextLine(line string) (plugin.RenderedLine, error) {
 	// Apply tab expansion
 	content := r.expandTabs(line)
 	
-	// Apply basic text styling
-	textStyle := themePlugin.GetStyle(theme.TextNormal)
-	
-	styles := []plugin.StyleRange{
-		{
-			Start: 0,
-			End:   len(content),
-			Style: textStyle,
-		},
-	}
-	
+	// No special styling for plain text
 	return plugin.RenderedLine{
 		Content: content,
-		Styles:  styles,
+		Styles:  []plugin.StyleRange{},
 		Metadata: map[string]interface{}{
 			"plain_text": true,
 		},
@@ -401,20 +350,20 @@ func (r *TerminalRenderer) expandTabs(line string) string {
 }
 
 // RenderToString converts rendered lines to terminal output
-func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine, themePlugin theme.Theme) string {
+func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine) string {
 	var result strings.Builder
 	
 	for i, line := range lines {
 		// Add line number if enabled
 		if r.config.ShowLineNumbers {
-			lineNumStyle := themePlugin.GetStyle(theme.EditorLineNumber)
 			lineNumStr := r.formatLineNumber(i+1, len(lines))
+			lineNumStyle := plugin.Style{Foreground: getAccessibleColor(ColorGray)}
 			styledLineNum := lineNumStyle.ToLipgloss().Render(lineNumStr)
 			result.WriteString(styledLineNum)
 		}
 		
 		// Render the line content with styles
-		content := r.renderLineWithStyles(line, themePlugin)
+		content := r.renderLineWithStyles(line)
 		result.WriteString(content)
 		
 		// Add newline except for last line
@@ -428,24 +377,24 @@ func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine, themePlug
 
 // RenderToStringWithCursor renders lines with cursor positioning
 // cursorRow, cursorCol are in screen coordinates (ScreenPos)
-func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine, themePlugin theme.Theme, cursorRow, cursorCol int) string {
+func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine, cursorRow, cursorCol int) string {
 	var result strings.Builder
 	
 	for i, line := range lines {
 		// Add line number if enabled
 		if r.config.ShowLineNumbers {
-			lineNumStyle := themePlugin.GetStyle(theme.EditorLineNumber)
 			lineNumStr := r.formatLineNumber(i+1, len(lines))
+			lineNumStyle := plugin.Style{Foreground: getAccessibleColor(ColorGray)}
 			styledLineNum := lineNumStyle.ToLipgloss().Render(lineNumStr)
 			result.WriteString(styledLineNum)
 		}
 		
 		// Render the line content with styles, including cursor if on this line
 		if i == cursorRow {
-			content := r.renderLineWithStylesAndCursor(line, themePlugin, cursorCol)
+			content := r.renderLineWithStylesAndCursor(line, cursorCol)
 			result.WriteString(content)
 		} else {
-			content := r.renderLineWithStyles(line, themePlugin)
+			content := r.renderLineWithStyles(line)
 			result.WriteString(content)
 		}
 		
@@ -466,7 +415,7 @@ func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine,
 // - End-of-line: extend line with space, replace with cursor → "Hello█"
 // - Within line: replace existing character with cursor → "He█lo"
 // - Empty line: extend with space, replace with cursor → "█"
-func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLine, themePlugin theme.Theme, cursorCol int) string {
+func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLine, cursorCol int) string {
 	// ScreenPos coordinates are absolute screen positions, but we need position within line content
 	// Subtract line number offset to get position within the line content
 	adjustedCursorCol := cursorCol
@@ -502,7 +451,7 @@ func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLin
 		Styles:  line.Styles,
 	}
 	
-	return r.renderLineWithStyles(lineWithCursor, themePlugin)
+	return r.renderLineWithStyles(lineWithCursor)
 }
 
 // formatLineNumber formats a line number using the appropriate width
@@ -521,15 +470,11 @@ func (r *TerminalRenderer) formatLineNumber(lineNum, totalLines int) string {
 }
 
 // renderLineWithStyles applies styles to a line
-func (r *TerminalRenderer) renderLineWithStyles(line plugin.RenderedLine, themePlugin theme.Theme) string {
+func (r *TerminalRenderer) renderLineWithStyles(line plugin.RenderedLine) string {
 	if len(line.Styles) == 0 {
-		// Apply default text styling if no styles are provided
-		defaultStyle := themePlugin.GetStyle(theme.TextNormal)
-		return defaultStyle.ToLipgloss().Render(line.Content)
+		// No styles, return content as-is
+		return line.Content
 	}
-	
-	// Get default style for unstyled text
-	defaultStyle := themePlugin.GetStyle(theme.TextNormal)
 	
 	// Sort styles by start position to handle overlapping styles properly
 	// For now, we'll process them in the order they appear
@@ -539,11 +484,9 @@ func (r *TerminalRenderer) renderLineWithStyles(line plugin.RenderedLine, themeP
 	lastEnd := 0
 	
 	for _, styleRange := range line.Styles {
-		// Add unstyled text before this style with default styling
+		// Add unstyled text before this style
 		if styleRange.Start > lastEnd {
-			unstyledText := string(runes[lastEnd:styleRange.Start])
-			styledUnstyledText := defaultStyle.ToLipgloss().Render(unstyledText)
-			result.WriteString(styledUnstyledText)
+			result.WriteString(string(runes[lastEnd:styleRange.Start]))
 		}
 		
 		// Apply the style - ensure bounds are valid
@@ -555,11 +498,9 @@ func (r *TerminalRenderer) renderLineWithStyles(line plugin.RenderedLine, themeP
 		}
 	}
 	
-	// Add any remaining unstyled text with default styling
+	// Add any remaining unstyled text
 	if lastEnd < len(runes) {
-		remainingText := string(runes[lastEnd:])
-		styledRemainingText := defaultStyle.ToLipgloss().Render(remainingText)
-		result.WriteString(styledRemainingText)
+		result.WriteString(string(runes[lastEnd:]))
 	}
 	
 	return result.String()
