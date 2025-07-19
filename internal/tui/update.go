@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	
@@ -429,27 +430,26 @@ func (m *Model) handleMouseDrag(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func (m *Model) toggleTheme() (tea.Model, tea.Cmd) {
 	registry := plugin.GetRegistry()
 	
+	// Get current theme to determine toggle direction
+	currentTheme, err := registry.GetDefaultTheme()
+	if err != nil {
+		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
+	}
+	
 	// Toggle between light and dark themes
-	if m.currentTheme == "dark" {
-		m.currentTheme = "light"
+	var newThemeName string
+	if currentTheme.Name() == "dark" {
+		newThemeName = "light"
 	} else {
-		m.currentTheme = "dark"
+		newThemeName = "dark"
 	}
 	
 	// Set the new theme as default
-	if err := registry.SetDefaultTheme(m.currentTheme); err != nil {
+	if err := registry.SetDefaultTheme(newThemeName); err != nil {
 		m.showMessage("Error switching theme: " + err.Error())
 		return m, nil
 	}
 	
-	m.showMessage("Theme switched to " + m.currentTheme)
+	m.showMessage("Theme switched to " + newThemeName)
 	return m, nil
-}
-
-// syncThemeWithRegistry synchronizes the model's currentTheme with the registry default
-func (m *Model) syncThemeWithRegistry() {
-	registry := plugin.GetRegistry()
-	if defaultTheme, err := registry.GetDefaultTheme(); err == nil {
-		m.currentTheme = defaultTheme.Name()
-	}
 }
