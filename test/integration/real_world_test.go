@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"testing"
-	"github.com/ofri/mde/internal/config"
 	"github.com/ofri/mde/internal/plugins"
 	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/pkg/plugin"
@@ -38,12 +37,8 @@ func testFullPluginLifecycle(t *testing.T) {
 	// Reset registry for clean test
 	plugin.ResetRegistry()
 	
-	// 1. Load configuration
-	cfg := config.DefaultConfig()
-	require.NotNil(t, cfg, "Should load configuration")
-	
-	// 2. Initialize plugins
-	err := plugins.InitializePlugins(cfg)
+	// 1. Initialize plugins
+	err := plugins.InitializePlugins()
 	require.NoError(t, err, "Should initialize plugins without error")
 	
 	// 3. Get plugin registry
@@ -81,34 +76,12 @@ func testConfigurationIntegration(t *testing.T) {
 	// Reset registry for clean test
 	plugin.ResetRegistry()
 	
-	// Create configuration with custom settings
-	cfg := config.DefaultConfig()
+	// The new minimal config system doesn't support plugin-specific settings
+	// Editor settings are now passed directly to the editor
 	
-	// Set custom renderer settings
-	rendererConfig := map[string]interface{}{
-		"showLineNumbers": true,
-		"tabWidth":        2,
-		"maxWidth":        120,
-	}
-	cfg.SetPluginConfig("renderer", "terminal", rendererConfig)
-	
-	// Set custom theme settings
-	themeConfig := map[string]interface{}{
-		"primary": "#FF6B6B",
-		"secondary": "#4ECDC4",
-	}
-	cfg.SetPluginConfig("theme", "dark", themeConfig)
-	
-	// Initialize plugins with custom config
-	err := plugins.InitializePlugins(cfg)
-	require.NoError(t, err, "Should initialize plugins with custom config")
-	
-	// Test that configuration is applied
-	err = plugins.ConfigurePlugin("renderer", "terminal", rendererConfig)
-	require.NoError(t, err, "Should configure renderer plugin")
-	
-	err = plugins.ConfigurePlugin("theme", "dark", themeConfig)
-	require.NoError(t, err, "Should configure theme plugin")
+	// Initialize plugins
+	err := plugins.InitializePlugins()
+	require.NoError(t, err, "Should initialize plugins with config")
 	
 	// Verify plugin status
 	status := plugins.GetPluginStatus()
@@ -121,8 +94,7 @@ func testDocumentRenderingPipeline(t *testing.T) {
 	plugin.ResetRegistry()
 	
 	// Initialize plugins
-	cfg := config.DefaultConfig()
-	err := plugins.InitializePlugins(cfg)
+	err := plugins.InitializePlugins()
 	require.NoError(t, err, "Should initialize plugins")
 	
 	registry := plugin.GetRegistry()
@@ -189,9 +161,7 @@ func testErrorScenarios(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found", "Should have appropriate error message")
 	
 	// Test invalid plugin configuration
-	err = plugins.ConfigurePlugin("invalid-type", "test", map[string]interface{}{})
-	assert.Error(t, err, "Should error on invalid plugin type")
-	assert.Contains(t, err.Error(), "unknown plugin type", "Should have appropriate error message")
+	// ConfigurePlugin has been removed from the minimal config system
 	
 	// Test plugin error handling
 	pluginErr := plugin.NewPluginError("theme", "test", "render", assert.AnError)
@@ -216,8 +186,7 @@ func TestPluginArchitecturePerformance(t *testing.T) {
 	plugin.ResetRegistry()
 	
 	// Initialize plugins
-	cfg := config.DefaultConfig()
-	err := plugins.InitializePlugins(cfg)
+	err := plugins.InitializePlugins()
 	require.NoError(t, err, "Should initialize plugins")
 	
 	registry := plugin.GetRegistry()
@@ -252,8 +221,7 @@ func TestPluginArchitectureThreadSafety(t *testing.T) {
 	plugin.ResetRegistry()
 	
 	// Initialize plugins
-	cfg := config.DefaultConfig()
-	err := plugins.InitializePlugins(cfg)
+	err := plugins.InitializePlugins()
 	require.NoError(t, err, "Should initialize plugins")
 	
 	registry := plugin.GetRegistry()

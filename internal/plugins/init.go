@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"fmt"
-	"github.com/ofri/mde/internal/config"
 	"github.com/ofri/mde/internal/plugins/parsers"
 	"github.com/ofri/mde/internal/plugins/renderers"
 	"github.com/ofri/mde/internal/plugins/themes"
@@ -10,24 +9,24 @@ import (
 )
 
 // InitializePlugins initializes all built-in plugins
-func InitializePlugins(cfg *config.Config) error {
+func InitializePlugins() error {
 	// Initialize themes
-	if err := initializeThemes(cfg); err != nil {
+	if err := initializeThemes(); err != nil {
 		return fmt.Errorf("failed to initialize themes: %w", err)
 	}
 	
 	// Initialize renderers
-	if err := initializeRenderers(cfg); err != nil {
+	if err := initializeRenderers(); err != nil {
 		return fmt.Errorf("failed to initialize renderers: %w", err)
 	}
 	
-	// Initialize parsers (when we have them)
-	if err := initializeParsers(cfg); err != nil {
+	// Initialize parsers
+	if err := initializeParsers(); err != nil {
 		return fmt.Errorf("failed to initialize parsers: %w", err)
 	}
 	
 	// Set default plugins
-	if err := setDefaultPlugins(cfg); err != nil {
+	if err := setDefaultPlugins(); err != nil {
 		return fmt.Errorf("failed to set default plugins: %w", err)
 	}
 	
@@ -35,7 +34,7 @@ func InitializePlugins(cfg *config.Config) error {
 }
 
 // initializeThemes registers all built-in themes
-func initializeThemes(cfg *config.Config) error {
+func initializeThemes() error {
 	registry := plugin.GetRegistry()
 	
 	// Register dark theme
@@ -44,29 +43,17 @@ func initializeThemes(cfg *config.Config) error {
 		return fmt.Errorf("failed to register dark theme: %w", err)
 	}
 	
-	// Configure dark theme with user settings
-	themeConfig := cfg.GetPluginConfig("theme", darkTheme.Name())
-	if err := darkTheme.Configure(themeConfig); err != nil {
-		return fmt.Errorf("failed to configure dark theme: %w", err)
-	}
-	
 	// Register light theme
 	lightTheme := themes.NewLightTheme()
 	if err := registry.RegisterTheme(lightTheme.Name(), lightTheme); err != nil {
 		return fmt.Errorf("failed to register light theme: %w", err)
 	}
 	
-	// Configure light theme with user settings
-	lightThemeConfig := cfg.GetPluginConfig("theme", lightTheme.Name())
-	if err := lightTheme.Configure(lightThemeConfig); err != nil {
-		return fmt.Errorf("failed to configure light theme: %w", err)
-	}
-	
 	return nil
 }
 
 // initializeRenderers registers all built-in renderers
-func initializeRenderers(cfg *config.Config) error {
+func initializeRenderers() error {
 	registry := plugin.GetRegistry()
 	
 	// Register terminal renderer
@@ -75,15 +62,11 @@ func initializeRenderers(cfg *config.Config) error {
 		return fmt.Errorf("failed to register terminal renderer: %w", err)
 	}
 	
-	// Configure renderer with user settings
-	rendererConfig := cfg.GetPluginConfig("renderer", terminalRenderer.Name())
-	
-	// Add editor config to renderer config
-	if rendererConfig == nil {
-		rendererConfig = make(map[string]interface{})
+	// Configure renderer with sensible defaults
+	rendererConfig := map[string]interface{}{
+		"showLineNumbers": true,
+		"tabWidth":        4,
 	}
-	rendererConfig["showLineNumbers"] = cfg.Editor.ShowLineNumbers
-	rendererConfig["tabWidth"] = cfg.Editor.TabWidth
 	
 	if err := terminalRenderer.Configure(rendererConfig); err != nil {
 		return fmt.Errorf("failed to configure terminal renderer: %w", err)
@@ -93,7 +76,7 @@ func initializeRenderers(cfg *config.Config) error {
 }
 
 // initializeParsers registers all built-in parsers
-func initializeParsers(cfg *config.Config) error {
+func initializeParsers() error {
 	registry := plugin.GetRegistry()
 	
 	// Register CommonMark parser
@@ -102,38 +85,26 @@ func initializeParsers(cfg *config.Config) error {
 		return fmt.Errorf("failed to register CommonMark parser: %w", err)
 	}
 	
-	// Configure parser with user settings
-	parserConfig := cfg.GetPluginConfig("parser", commonMarkParser.Name())
-	if err := commonMarkParser.Configure(parserConfig); err != nil {
-		return fmt.Errorf("failed to configure CommonMark parser: %w", err)
-	}
-	
 	return nil
 }
 
-// setDefaultPlugins sets the default plugins based on configuration
-func setDefaultPlugins(cfg *config.Config) error {
+// setDefaultPlugins sets the default plugins
+func setDefaultPlugins() error {
 	registry := plugin.GetRegistry()
 	
 	// Set default theme
-	if cfg.Plugins.DefaultTheme != "" {
-		if err := registry.SetDefaultTheme(cfg.Plugins.DefaultTheme); err != nil {
-			return fmt.Errorf("failed to set default theme '%s': %w", cfg.Plugins.DefaultTheme, err)
-		}
+	if err := registry.SetDefaultTheme("dark"); err != nil {
+		return fmt.Errorf("failed to set default theme: %w", err)
 	}
 	
-	// Set default renderer
-	if cfg.Plugins.DefaultRenderer != "" {
-		if err := registry.SetDefaultRenderer(cfg.Plugins.DefaultRenderer); err != nil {
-			return fmt.Errorf("failed to set default renderer '%s': %w", cfg.Plugins.DefaultRenderer, err)
-		}
+	// Set default renderer (always terminal for now)
+	if err := registry.SetDefaultRenderer("terminal"); err != nil {
+		return fmt.Errorf("failed to set default renderer: %w", err)
 	}
 	
-	// Set default parser
-	if cfg.Plugins.DefaultParser != "" {
-		if err := registry.SetDefaultParser(cfg.Plugins.DefaultParser); err != nil {
-			return fmt.Errorf("failed to set default parser '%s': %w", cfg.Plugins.DefaultParser, err)
-		}
+	// Set default parser (always commonmark for now)
+	if err := registry.SetDefaultParser("commonmark"); err != nil {
+		return fmt.Errorf("failed to set default parser: %w", err)
 	}
 	
 	return nil
@@ -150,33 +121,3 @@ func GetPluginStatus() map[string]interface{} {
 	}
 }
 
-// ConfigurePlugin configures a specific plugin with new settings
-func ConfigurePlugin(pluginType, pluginName string, options map[string]interface{}) error {
-	registry := plugin.GetRegistry()
-	
-	switch pluginType {
-	case "renderer":
-		renderer, err := registry.GetRenderer(pluginName)
-		if err != nil {
-			return fmt.Errorf("renderer '%s' not found: %w", pluginName, err)
-		}
-		return renderer.Configure(options)
-		
-	case "theme":
-		theme, err := registry.GetTheme(pluginName)
-		if err != nil {
-			return fmt.Errorf("theme '%s' not found: %w", pluginName, err)
-		}
-		return theme.Configure(options)
-		
-	case "parser":
-		parser, err := registry.GetParser(pluginName)
-		if err != nil {
-			return fmt.Errorf("parser '%s' not found: %w", pluginName, err)
-		}
-		return parser.Configure(options)
-		
-	default:
-		return fmt.Errorf("unknown plugin type: %s", pluginType)
-	}
-}

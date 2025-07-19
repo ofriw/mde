@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"testing"
-	"github.com/ofri/mde/internal/config"
 	"github.com/ofri/mde/internal/plugins"
 	"github.com/ofri/mde/internal/plugins/renderers"
 	"github.com/ofri/mde/internal/plugins/themes"
@@ -190,8 +189,7 @@ func testRealPluginInitialization(t *testing.T) {
 	assert.Equal(t, "terminal", defaultRenderer.Name(), "Should have terminal as default renderer")
 	
 	// Test the full initialization process
-	cfg := config.DefaultConfig()
-	err = plugins.InitializePlugins(cfg)
+	err = plugins.InitializePlugins()
 	// This might fail due to missing dependencies, but should handle gracefully
 	if err != nil {
 		t.Logf("Plugin initialization failed (might be expected): %v", err)
@@ -201,11 +199,5 @@ func testRealPluginInitialization(t *testing.T) {
 	status := plugins.GetPluginStatus()
 	assert.NotNil(t, status, "Should get plugin status")
 	
-	// Test plugin configuration
-	err = plugins.ConfigurePlugin("theme", "dark", map[string]interface{}{
-		"primary": "#00FF00",
-	})
-	if err != nil {
-		t.Logf("Plugin configuration failed (might be expected): %v", err)
-	}
+	// Plugin configuration has been removed from the minimal config system
 }

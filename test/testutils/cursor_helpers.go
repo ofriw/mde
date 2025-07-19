@@ -21,6 +21,7 @@ type CursorTestHelper struct {
 
 // NewCursorTestHelper creates a new cursor test helper
 func NewCursorTestHelper(t *testing.T, content string, width, height int) *CursorTestHelper {
+	// Create model for testing
 	model := tui.New()
 	if content != "" {
 		LoadContentIntoModel(model, content)

@@ -29,8 +29,7 @@ graph TB
     
     subgraph "Infrastructure"
         H[Event Bus] --> B
-        I[Config Manager] --> D
-        J[File System] --> C
+        I[File System] --> C
     end
 ```
 
@@ -114,8 +113,7 @@ func init() {
 - **Markdown Parser**: goldmark (CommonMark compliant, extensible)
 - **TUI Framework**: Bubble Tea + Bubbles
 - **Styling**: Lip Gloss (ANSI styling)
-- **Configuration**: Viper
-- **CLI Framework**: Cobra
+- **Configuration**: None - sensible defaults only
 
 ### Testing Stack
 - **Unit Testing**: Standard Go testing
@@ -187,17 +185,12 @@ mde/
 
 ## Configuration
 
-### User Config (`~/.config/mde/config.yaml`)
-```yaml
-theme: dark        # light or dark
-editor:
-  tab_size: 2
-  word_wrap: true
-  line_numbers: true
-shortcuts:         # Override default shortcuts
-  save: "Ctrl+S"
-  quit: "Ctrl+Q"
-```
+No configuration files. MDE uses sensible defaults:
+- Tab width: 4 spaces
+- Line numbers: enabled
+- Theme: dark
+
+All settings are optimized for markdown editing out of the box.
 
 ## Non-Functional Requirements
 

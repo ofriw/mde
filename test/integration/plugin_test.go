@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"testing"
-	"github.com/ofri/mde/internal/config"
 	"github.com/ofri/mde/internal/plugins"
 	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/pkg/plugin"
@@ -119,32 +118,14 @@ func testDarkTheme(t *testing.T, registry *plugin.Registry) {
 }
 
 func testConfigurationLoading(t *testing.T) {
-	// Test default configuration
-	defaultConfig := config.DefaultConfig()
-	assert.NotNil(t, defaultConfig, "Should create default config")
-	assert.Equal(t, 4, defaultConfig.Editor.TabWidth, "Should have correct tab width")
-	assert.Equal(t, "dark", defaultConfig.Theme.Name, "Should have correct default theme")
-	
-	// Test plugin configuration
-	pluginConfig := defaultConfig.GetPluginConfig("theme", "dark")
-	assert.NotNil(t, pluginConfig, "Should get plugin config")
-	
-	// Test setting plugin configuration
-	newConfig := map[string]interface{}{
-		"primary": "#00FF00",
-	}
-	defaultConfig.SetPluginConfig("theme", "dark", newConfig)
-	
-	retrieved := defaultConfig.GetPluginConfig("theme", "dark")
-	assert.Equal(t, "#00FF00", retrieved["primary"], "Should set and retrieve plugin config")
+	// No configuration system - MDE uses sensible defaults
+	t.Skip("No configuration system - using defaults")
 }
 
 func testPluginInitialization(t *testing.T) {
-	// Test plugin initialization with default config
-	cfg := config.DefaultConfig()
-	
+	// Test plugin initialization
 	// This should not error even though we don't have real plugins
-	err := plugins.InitializePlugins(cfg)
+	err := plugins.InitializePlugins()
 	// We expect this to pass or fail gracefully
 	if err != nil {
 		t.Logf("Plugin initialization failed (expected in test): %v", err)

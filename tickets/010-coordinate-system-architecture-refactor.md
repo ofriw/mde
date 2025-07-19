@@ -131,7 +131,7 @@ Based on comprehensive codebase search, the following files contain coordinate-r
 - `pkg/plugin/renderer.go` - Renderer plugin interface with coordinate handling
 - `pkg/plugin/registry.go` - Plugin registry (no coordinate logic but configuration)
 - `internal/plugins/init.go` - Plugin initialization with coordinate configuration
-- `internal/config/config.go` - Configuration settings affecting coordinate calculations
+- Configuration settings now use sensible defaults (no config file)
 
 **Test Files Analysis:**
 
