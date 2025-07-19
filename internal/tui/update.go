@@ -1,12 +1,10 @@
 package tui
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/ofri/mde/pkg/plugin"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -163,10 +161,6 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.showMessage("Preview mode disabled")
 		}
 		
-	case tea.KeyCtrlT:
-		// Toggle theme
-		return m.toggleTheme()
-
 	case tea.KeyHome:
 		m.editor.MoveCursorToLineStart()
 
@@ -414,30 +408,3 @@ func (m *Model) handleMouseDrag(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// toggleTheme switches between light and dark themes
-func (m *Model) toggleTheme() (tea.Model, tea.Cmd) {
-	registry := plugin.GetRegistry()
-	
-	// Get current theme to determine toggle direction
-	currentTheme, err := registry.GetDefaultTheme()
-	if err != nil {
-		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
-	}
-	
-	// Toggle between light and dark themes
-	var newThemeName string
-	if currentTheme.Name() == "dark" {
-		newThemeName = "light"
-	} else {
-		newThemeName = "dark"
-	}
-	
-	// Set the new theme as default
-	if err := registry.SetDefaultTheme(newThemeName); err != nil {
-		m.showMessage("Error switching theme: " + err.Error())
-		return m, nil
-	}
-	
-	m.showMessage("Theme switched to " + newThemeName)
-	return m, nil
-}

@@ -14,7 +14,6 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/pkg/plugin"
-	themepkg "github.com/ofri/mde/pkg/theme"
 	"github.com/ofri/mde/internal/plugins/renderers"
 )
 
@@ -115,15 +114,8 @@ func (m *Model) View() string {
 	statusBar := m.renderStatusBar()
 	helpBar := m.renderHelpBar()
 	
-	// Apply editor background theme
-	registry := plugin.GetRegistry()
-	themePlugin, err := registry.GetDefaultTheme()
-	if err != nil {
-		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
-	}
-	
-	editorBgStyle := themePlugin.GetStyle(themepkg.EditorBackground)
-	editorStyle := editorBgStyle.ToLipgloss().Width(m.width).Height(m.height)
+	// No background styling - use terminal's default
+	editorStyle := lipgloss.NewStyle().Width(m.width).Height(m.height)
 	return editorStyle.Render(lipgloss.JoinVertical(lipgloss.Top, content, statusBar, helpBar))
 }
 
@@ -149,21 +141,15 @@ func (m *Model) renderEditorContent() string {
 		panic(fmt.Sprintf("FATAL: Failed to configure renderer: %v\nThis is a programming error - renderer configuration should never fail", err))
 	}
 	
-	// Get theme plugin - must exist as it's compiled into the binary
-	theme, err := registry.GetDefaultTheme()
-	if err != nil {
-		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
-	}
-	
 	// Render the document using plugins
 	ctx := context.Background()
-	renderedLines, err := renderer.Render(ctx, m.editor.GetDocument(), theme)
+	renderedLines, err := renderer.Render(ctx, m.editor.GetDocument())
 	if err != nil {
 		panic(fmt.Sprintf("FATAL: Renderer failed to render document: %v\nThis is a programming error - internal renderer should never fail", err))
 	}
 	
 	// Convert rendered lines to string and add cursor
-	content := m.renderLinesWithCursor(renderedLines, theme, renderer)
+	content := m.renderLinesWithCursor(renderedLines, renderer)
 	
 	// Pad to fill editor height
 	lines := strings.Split(content, "\n")
@@ -178,14 +164,8 @@ func (m *Model) renderEditorContent() string {
 	
 	result := strings.Join(lines, "\n")
 	
-	// Apply editor background theme
-	currentTheme, err := registry.GetDefaultTheme()
-	if err != nil {
-		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
-	}
-	
-	editorBgStyle := currentTheme.GetStyle(themepkg.EditorBackground)
-	editorStyle := editorBgStyle.ToLipgloss().Width(m.width).Height(editorHeight)
+	// No background styling - use terminal's default
+	editorStyle := lipgloss.NewStyle().Width(m.width).Height(editorHeight)
 	return editorStyle.Render(result)
 }
 
@@ -210,15 +190,9 @@ func (m *Model) renderPreviewContent() string {
 		panic(fmt.Sprintf("FATAL: Failed to configure renderer: %v\nThis is a programming error - renderer configuration should never fail", err))
 	}
 	
-	// Get theme plugin - must exist as it's compiled into the binary
-	themePlugin, err := registry.GetDefaultTheme()
-	if err != nil {
-		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
-	}
-	
 	// Render the document using plugins in preview mode
 	ctx := context.Background()
-	renderedLines, err := renderer.RenderPreview(ctx, m.editor.GetDocument(), themePlugin)
+	renderedLines, err := renderer.RenderPreview(ctx, m.editor.GetDocument())
 	if err != nil {
 		panic(fmt.Sprintf("FATAL: Renderer failed to render document in preview mode: %v\nThis is a programming error - internal renderer should never fail", err))
 	}
@@ -255,17 +229,16 @@ func (m *Model) renderPreviewContent() string {
 		visibleLines = visibleLines[:editorHeight]
 	}
 	
-	// Use the renderer's RenderToString method to apply theme styles
+	// Use the renderer's RenderToString method to convert to terminal output
 	// The renderer MUST be a TerminalRenderer as it's the only implementation
 	terminalRenderer, ok := renderer.(*renderers.TerminalRenderer)
 	if !ok {
 		panic(fmt.Sprintf("FATAL: Renderer is not a TerminalRenderer: got %T\nThis is a programming error - only TerminalRenderer is supported", renderer))
 	}
-	content := terminalRenderer.RenderToString(visibleLines, themePlugin)
+	content := terminalRenderer.RenderToString(visibleLines)
 	
-	// Apply editor background theme - theme is guaranteed to exist
-	editorBgStyle := themePlugin.GetStyle(themepkg.EditorBackground)
-	editorStyle := editorBgStyle.ToLipgloss().Width(m.width).Height(editorHeight)
+	// No background styling - use terminal's default
+	editorStyle := lipgloss.NewStyle().Width(m.width).Height(editorHeight)
 	return editorStyle.Render(content)
 }
 
@@ -477,7 +450,7 @@ func (m *Model) parseVisibleLines(parser plugin.ParserPlugin, ctx context.Contex
 }
 
 // renderLinesWithCursor converts rendered lines to display string with cursor
-func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, themePlugin themepkg.Theme, renderer plugin.RendererPlugin) string {
+func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, renderer plugin.RendererPlugin) string {
 	// The renderer MUST be a TerminalRenderer as it's the only implementation
 	terminalRenderer, ok := renderer.(*renderers.TerminalRenderer)
 	if !ok {
@@ -495,7 +468,7 @@ func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, theme
 		return strings.Join(lines, "\n")
 	}
 	
-	return terminalRenderer.RenderToStringWithCursor(renderedLines, themePlugin, screenPos.Row, screenPos.Col)
+	return terminalRenderer.RenderToStringWithCursor(renderedLines, screenPos.Row, screenPos.Col)
 }
 
 // configureRenderer synchronizes the renderer configuration with the editor's settings.
@@ -541,15 +514,10 @@ func (m *Model) renderStatusBar() string {
 		gap = 1
 	}
 	
-	// Get theme style for status bar
-	registry := plugin.GetRegistry()
-	themePlugin, err := registry.GetDefaultTheme()
-	if err != nil {
-		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
-	}
-	
-	themeStyle := themePlugin.GetStyle(themepkg.UIStatusBar)
-	statusBarStyle := themeStyle.ToLipgloss().Width(m.width)
+	// Status bar style - use inverse colors (terminal will handle this)
+	statusBarStyle := lipgloss.NewStyle().
+		Reverse(true).
+		Width(m.width)
 	
 	statusBar := statusBarStyle.Render(status + strings.Repeat(" ", gap) + position)
 	
@@ -569,18 +537,14 @@ func (m *Model) renderHelpBar() string {
 		filename := m.editor.GetDocument().GetFilename()
 		help = fmt.Sprintf("Save changes to %s? (y/n/c)", filename)
 	default:
-		help = "^O Open  ^S Save  ^Q Quit  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto  ^P Preview  ^T Theme"
+		help = "^O Open  ^S Save  ^Q Quit  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto  ^P Preview"
 	}
 	
-	// Get theme style for help bar
-	registry := plugin.GetRegistry()
-	themePlugin, err := registry.GetDefaultTheme()
-	if err != nil {
-		panic(fmt.Sprintf("FATAL: Failed to get default theme plugin: %v\nThis is a programming error - theme plugin must be registered at startup", err))
-	}
-	
-	themeStyle := themePlugin.GetStyle(themepkg.UIHelpBar)
-	helpBarStyle := themeStyle.ToLipgloss().Width(m.width).Align(lipgloss.Center)
+	// Help bar style - use reverse for background like status bar
+	helpBarStyle := lipgloss.NewStyle().
+		Reverse(true).
+		Width(m.width).
+		Align(lipgloss.Center)
 	
 	helpBar := helpBarStyle.Render(help)
 	
