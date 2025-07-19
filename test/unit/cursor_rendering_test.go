@@ -22,7 +22,6 @@ import (
 
 	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/internal/plugins/renderers"
-	"github.com/ofri/mde/internal/plugins/themes"
 	"github.com/ofri/mde/pkg/plugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,9 +60,6 @@ func TestCursor_RenderingAtPosition00(t *testing.T) {
 	// Create terminal renderer
 	renderer := renderers.NewTerminalRenderer()
 	
-	// Create theme
-	theme := &themes.DarkTheme{}
-	
 	// Create rendered line
 	renderedLine := plugin.RenderedLine{
 		Content: content,
@@ -80,7 +76,7 @@ func TestCursor_RenderingAtPosition00(t *testing.T) {
 	cursorRow, cursorCol := screenPos.Row, screenPos.Col
 	
 	// Render with cursor
-	result := renderer.RenderToStringWithCursor([]plugin.RenderedLine{renderedLine}, theme, cursorRow, cursorCol)
+	result := renderer.RenderToStringWithCursor([]plugin.RenderedLine{renderedLine}, cursorRow, cursorCol)
 	
 	// CRITICAL TEST: The cursor should be ON the first character 'H', not appended at the end
 	// This test will FAIL with current bug because cursor gets appended as ghost character
@@ -122,8 +118,8 @@ func TestCursor_RenderingAtPosition00_WithLineNumbers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	
-	// Create theme
-	theme := &themes.DarkTheme{}
+	// 
+	
 	
 	// Create rendered line
 	renderedLine := plugin.RenderedLine{
@@ -141,7 +137,7 @@ func TestCursor_RenderingAtPosition00_WithLineNumbers(t *testing.T) {
 	cursorRow, cursorCol := screenPos.Row, screenPos.Col
 	
 	// Render with cursor
-	result := renderer.RenderToStringWithCursor([]plugin.RenderedLine{renderedLine}, theme, cursorRow, cursorCol)
+	result := renderer.RenderToStringWithCursor([]plugin.RenderedLine{renderedLine}, cursorRow, cursorCol)
 	
 	// CRITICAL TEST: Even with line numbers, cursor should be on first character of content
 	// This test will FAIL with current bug
@@ -202,20 +198,20 @@ func TestCursor_VisibilityOnEmptyLine(t *testing.T) {
 	pos := editor.GetCursor().GetBufferPos()
 	require.Equal(t, ast.BufferPos{Line: 0, Col: 0}, pos, "Cursor should be at (0,0) on empty line")
 	
-	// Create renderer and theme
+	// Create renderer
 	renderer := renderers.NewTerminalRenderer()
-	theme := themes.NewDarkTheme()
+	
 	
 	// Render empty document
 	doc := editor.GetDocument()
-	renderedLines, err := renderer.Render(context.Background(), doc, theme)
+	renderedLines, err := renderer.Render(context.Background(), doc)
 	require.NoError(t, err)
 	
 	// Get cursor position
 	contentPos := editor.GetCursor().GetBufferPos()
 	
 	// Render with cursor
-	result := renderer.RenderToStringWithCursor(renderedLines, theme, contentPos.Line, contentPos.Col)
+	result := renderer.RenderToStringWithCursor(renderedLines, contentPos.Line, contentPos.Col)
 	
 	// Verify cursor is visible and at position 0
 	cleanResult := stripAnsiEscapes(result)
@@ -237,20 +233,20 @@ func TestCursor_VisibilityAtEndOfLine(t *testing.T) {
 	pos := editor.GetCursor().GetBufferPos()
 	require.Equal(t, ast.BufferPos{Line: 0, Col: 5}, pos, "Cursor should be at end of line")
 	
-	// Create renderer and theme
+	// Create renderer
 	renderer := renderers.NewTerminalRenderer()
-	theme := themes.NewDarkTheme()
+	
 	
 	// Render document
 	doc := editor.GetDocument()
-	renderedLines, err := renderer.Render(context.Background(), doc, theme)
+	renderedLines, err := renderer.Render(context.Background(), doc)
 	require.NoError(t, err)
 	
 	// Get cursor position
 	contentPos := editor.GetCursor().GetBufferPos()
 	
 	// Render with cursor
-	result := renderer.RenderToStringWithCursor(renderedLines, theme, contentPos.Line, contentPos.Col)
+	result := renderer.RenderToStringWithCursor(renderedLines, contentPos.Line, contentPos.Col)
 	
 	// Verify cursor appears at end of line
 	cleanResult := stripAnsiEscapes(result)
@@ -282,18 +278,18 @@ func TestCursor_VisibilityWithLineNumbers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	
-	theme := themes.NewDarkTheme()
+	
 	
 	// Render document
 	doc := editor.GetDocument()
-	renderedLines, err := renderer.Render(context.Background(), doc, theme)
+	renderedLines, err := renderer.Render(context.Background(), doc)
 	require.NoError(t, err)
 	
 	// Get cursor position (should include line number offset)
 	contentPos := editor.GetCursor().GetBufferPos()
 	
 	// Render with cursor
-	result := renderer.RenderToStringWithCursor(renderedLines, theme, contentPos.Line, contentPos.Col)
+	result := renderer.RenderToStringWithCursor(renderedLines, contentPos.Line, contentPos.Col)
 	
 	// Verify cursor visible after line number prefix
 	cleanResult := stripAnsiEscapes(result)

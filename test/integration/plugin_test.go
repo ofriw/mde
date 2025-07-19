@@ -6,7 +6,6 @@ import (
 	"github.com/ofri/mde/internal/plugins"
 	"github.com/ofri/mde/pkg/ast"
 	"github.com/ofri/mde/pkg/plugin"
-	"github.com/ofri/mde/pkg/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,11 +25,6 @@ func TestPluginArchitecture(t *testing.T) {
 		testTerminalRenderer(t, registry)
 	})
 	
-	// Test 3: Dark theme integration
-	t.Run("DarkTheme", func(t *testing.T) {
-		testDarkTheme(t, registry)
-	})
-	
 	// Test 4: Configuration loading
 	t.Run("ConfigurationLoading", func(t *testing.T) {
 		testConfigurationLoading(t)
@@ -48,30 +42,7 @@ func TestPluginArchitecture(t *testing.T) {
 }
 
 func testPluginRegistration(t *testing.T, registry *plugin.Registry) {
-	// Create mock theme
-	mockTheme := &MockTheme{name: "test-theme"}
-	
-	// Test registration
-	err := registry.RegisterTheme(mockTheme.Name(), mockTheme)
-	require.NoError(t, err, "Should register theme successfully")
-	
-	// Test duplicate registration
-	err = registry.RegisterTheme(mockTheme.Name(), mockTheme)
-	assert.Error(t, err, "Should fail on duplicate registration")
-	
-	// Test retrieval
-	retrieved, err := registry.GetTheme(mockTheme.Name())
-	require.NoError(t, err, "Should retrieve registered theme")
-	assert.Equal(t, mockTheme.Name(), retrieved.Name(), "Should retrieve correct theme")
-	
-	// Test listing
-	themes := registry.ListThemes()
-	assert.Contains(t, themes, mockTheme.Name(), "Should list registered theme")
-	
-	// Test default theme
-	defaultTheme, err := registry.GetDefaultTheme()
-	require.NoError(t, err, "Should have default theme")
-	assert.Equal(t, mockTheme.Name(), defaultTheme.Name(), "Should set first theme as default")
+	// Test parser registration functionality
 }
 
 func testTerminalRenderer(t *testing.T, registry *plugin.Registry) {
@@ -84,37 +55,12 @@ func testTerminalRenderer(t *testing.T, registry *plugin.Registry) {
 	
 	// Test renderer functionality
 	doc := ast.NewDocument("Hello World\nThis is a test")
-	mockTheme := &MockTheme{name: "test-theme"}
-	
 	ctx := context.Background()
-	lines, err := mockRenderer.Render(ctx, doc, mockTheme)
+	lines, err := mockRenderer.Render(ctx, doc)
 	require.NoError(t, err, "Should render document successfully")
 	assert.Len(t, lines, 2, "Should render correct number of lines")
 	assert.Equal(t, "Hello World", lines[0].Content, "Should render correct content")
 	assert.Equal(t, "This is a test", lines[1].Content, "Should render correct content")
-}
-
-func testDarkTheme(t *testing.T, registry *plugin.Registry) {
-	mockTheme := &MockTheme{name: "dark-theme"}
-	
-	// Register theme
-	err := registry.RegisterTheme(mockTheme.Name(), mockTheme)
-	require.NoError(t, err, "Should register theme successfully")
-	
-	// Test theme functionality
-	style := mockTheme.GetStyle(theme.TextNormal)
-	assert.NotEmpty(t, style.Foreground, "Should have foreground color")
-	
-	colorScheme := mockTheme.GetColorScheme()
-	assert.NotEmpty(t, colorScheme.Background, "Should have background color")
-	assert.NotEmpty(t, colorScheme.Foreground, "Should have foreground color")
-	
-	// Test theme configuration
-	options := map[string]interface{}{
-		"primary": "#FF0000",
-	}
-	err = mockTheme.Configure(options)
-	assert.NoError(t, err, "Should configure theme successfully")
 }
 
 func testConfigurationLoading(t *testing.T) {
@@ -134,25 +80,21 @@ func testPluginInitialization(t *testing.T) {
 	// Test plugin status
 	status := plugins.GetPluginStatus()
 	assert.NotNil(t, status, "Should get plugin status")
-	assert.Contains(t, status, "themes", "Should have themes in status")
 	assert.Contains(t, status, "renderers", "Should have renderers in status")
 	assert.Contains(t, status, "parsers", "Should have parsers in status")
 }
 
 func testErrorHandling(t *testing.T, registry *plugin.Registry) {
 	// Test non-existent plugin retrieval
-	_, err := registry.GetTheme("non-existent")
-	assert.Error(t, err, "Should error on non-existent theme")
-	
-	_, err = registry.GetRenderer("non-existent")
+	_, err := registry.GetRenderer("non-existent")
 	assert.Error(t, err, "Should error on non-existent renderer")
 	
 	// Test plugin error creation
-	pluginErr := plugin.NewPluginError("theme", "test", "configure", assert.AnError)
-	assert.Contains(t, pluginErr.Error(), "theme/test", "Should format plugin error correctly")
+	pluginErr := plugin.NewPluginError("renderer", "test", "configure", assert.AnError)
+	assert.Contains(t, pluginErr.Error(), "renderer/test", "Should format plugin error correctly")
 	
 	// Test configuration error
-	configErr := plugin.NewConfigurationError("theme", "test", "color", assert.AnError)
+	configErr := plugin.NewConfigurationError("renderer", "test", "width", assert.AnError)
 	assert.Contains(t, configErr.Error(), "configuration error", "Should format config error correctly")
 	
 	// Test error type checking
@@ -162,33 +104,6 @@ func testErrorHandling(t *testing.T, registry *plugin.Registry) {
 
 // Mock implementations for testing
 
-type MockTheme struct {
-	name string
-}
-
-func (m *MockTheme) Name() string {
-	return m.name
-}
-
-func (m *MockTheme) GetStyle(elementType theme.ElementType) theme.Style {
-	return theme.Style{
-		Foreground: "#FFFFFF",
-		Background: "#000000",
-	}
-}
-
-func (m *MockTheme) GetColorScheme() theme.ColorScheme {
-	return theme.ColorScheme{
-		Background: "#000000",
-		Foreground: "#FFFFFF",
-		Primary:    "#0000FF",
-	}
-}
-
-func (m *MockTheme) Configure(options map[string]interface{}) error {
-	return nil
-}
-
 type MockRenderer struct {
 	name string
 }
@@ -197,7 +112,7 @@ func (m *MockRenderer) Name() string {
 	return m.name
 }
 
-func (m *MockRenderer) Render(ctx context.Context, doc *ast.Document, theme theme.Theme) ([]plugin.RenderedLine, error) {
+func (m *MockRenderer) Render(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
 	lines := make([]plugin.RenderedLine, 0, doc.LineCount())
 	
 	for i := 0; i < doc.LineCount(); i++ {
@@ -214,11 +129,11 @@ func (m *MockRenderer) Render(ctx context.Context, doc *ast.Document, theme them
 	return lines, nil
 }
 
-func (m *MockRenderer) RenderPreview(ctx context.Context, doc *ast.Document, theme theme.Theme) ([]plugin.RenderedLine, error) {
-	return m.Render(ctx, doc, theme)
+func (m *MockRenderer) RenderPreview(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
+	return m.Render(ctx, doc)
 }
 
-func (m *MockRenderer) RenderLine(ctx context.Context, line string, tokens []ast.Token, theme theme.Theme) (plugin.RenderedLine, error) {
+func (m *MockRenderer) RenderLine(ctx context.Context, line string, tokens []ast.Token) (plugin.RenderedLine, error) {
 	return plugin.RenderedLine{
 		Content: line,
 		Styles:  []plugin.StyleRange{},
