@@ -569,7 +569,7 @@ func (m *Model) renderHelpBar() string {
 		filename := m.editor.GetDocument().GetFilename()
 		help = fmt.Sprintf("Save changes to %s? (y/n/c)", filename)
 	default:
-		help = "^O Open  ^S Save  ^Q Quit  ^Z Undo  ^Y Redo  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto  ^P Preview  ^T Theme"
+		help = "^O Open  ^S Save  ^Q Quit  ^C Copy  ^V Paste  ^X Cut  ^A Select All  ^L Line Numbers  ^F Find  ^H Replace  ^G Goto  ^P Preview  ^T Theme"
 	}
 	
 	// Get theme style for help bar

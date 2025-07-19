@@ -82,12 +82,6 @@ func (p *CommonMarkParser) Parse(ctx context.Context, text string) (*mdeAST.Docu
 	return doc, nil
 }
 
-// ParseIncremental parses only changed sections for efficiency.
-// Currently performs full reparse for simplicity and correctness.
-func (p *CommonMarkParser) ParseIncremental(ctx context.Context, doc *mdeAST.Document, changes []mdeAST.Change) error {
-	_, err := p.Parse(ctx, doc.GetText())
-	return err
-}
 
 // GetSyntaxHighlighting returns syntax highlighting tokens for a line
 func (p *CommonMarkParser) GetSyntaxHighlighting(ctx context.Context, line string) ([]mdeAST.Token, error) {

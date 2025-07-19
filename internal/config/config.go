@@ -33,9 +33,6 @@ type EditorConfig struct {
 	
 	// Auto-save settings
 	AutoSave bool `mapstructure:"auto_save"`
-	
-	// History settings
-	HistorySize int `mapstructure:"history_size"`
 }
 
 // PluginConfig holds plugin-specific configuration
@@ -72,7 +69,6 @@ func DefaultConfig() *Config {
 			ViewportWidth:   80,
 			ViewportHeight:  24,
 			AutoSave:        false,
-			HistorySize:     1000,
 		},
 		Plugins: PluginConfig{
 			DefaultParser:    "commonmark",
@@ -165,7 +161,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("editor.viewport_width", defaults.Editor.ViewportWidth)
 	v.SetDefault("editor.viewport_height", defaults.Editor.ViewportHeight)
 	v.SetDefault("editor.auto_save", defaults.Editor.AutoSave)
-	v.SetDefault("editor.history_size", defaults.Editor.HistorySize)
 	
 	// Plugin defaults
 	v.SetDefault("plugins.default_parser", defaults.Plugins.DefaultParser)

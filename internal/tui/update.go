@@ -66,18 +66,6 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlO:
 		return m, m.openFile()
 
-	case tea.KeyCtrlZ:
-		if m.editor.CanUndo() {
-			m.editor.Undo()
-			m.showMessage("Undone")
-		}
-
-	case tea.KeyCtrlY:
-		if m.editor.CanRedo() {
-			m.editor.Redo()
-			m.showMessage("Redone")
-		}
-
 	case tea.KeyCtrlV:
 		m.editor.Paste()
 

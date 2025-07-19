@@ -5,16 +5,14 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"time"
 	"unicode/utf8"
 )
 
-// Editor manages the document, cursor, and history.
+// Editor manages the document and cursor.
 // Uses CursorManager for unified coordinate handling.
 type Editor struct {
 	document      *Document
 	cursorManager *CursorManager
-	history       *History
 	clipboard     string
 	lineNumbers   bool
 	viewport      *Viewport
@@ -34,7 +32,6 @@ func NewEditor() *Editor {
 	return &Editor{
 		document:      doc,
 		cursorManager: cursorManager,
-		history:       NewHistory(1000),
 		clipboard:     "",
 		lineNumbers:   false,
 		viewport:      viewport,
@@ -50,7 +47,6 @@ func NewEditorWithContent(content string) *Editor {
 	return &Editor{
 		document:      doc,
 		cursorManager: cursorManager,
-		history:       NewHistory(1000),
 		clipboard:     "",
 		lineNumbers:   false,
 		viewport:      viewport,
@@ -169,8 +165,6 @@ func (e *Editor) LoadFile(filename string) error {
 	e.cursorManager.UpdateValidator(e.document)
 	// Reset cursor position to start of document
 	e.cursorManager.SetBufferPos(BufferPos{Line: 0, Col: 0})
-	e.history.Clear()
-	
 	
 	return nil
 }
@@ -206,15 +200,6 @@ func (e *Editor) InsertText(text string) {
 	
 	pos := e.cursorManager.GetBufferPos()
 	
-	// Create change record
-	change := Change{
-		Type:      ChangeInsert,
-		BufferPos:  pos,
-		OldText:   "",
-		NewText:   text,
-		Timestamp: time.Now(),
-	}
-	
 	// Apply change to document
 	newPos := pos
 	for _, ch := range text {
@@ -228,9 +213,6 @@ func (e *Editor) InsertText(text string) {
 	// Update cursor position
 	e.cursorManager.SetBufferPos(newPos)
 	
-	// Add to history
-	e.history.AddChange(change, newPos)
-	
 }
 
 // DeleteText deletes text at the current cursor position
@@ -241,39 +223,19 @@ func (e *Editor) DeleteText(count int) {
 	
 	pos := e.cursorManager.GetBufferPos()
 	
-	// Collect text being deleted
-	var deletedText strings.Builder
+	// Delete text
 	deletePos := pos
 	
 	for i := 0; i < count && (deletePos.Col > 0 || deletePos.Line > 0); i++ {
 		if deletePos.Col > 0 {
-			ch := e.document.GetCharAt(BufferPos{Line: deletePos.Line, Col: deletePos.Col - 1})
-			deletedText.WriteRune(ch)
 			deletePos = e.document.DeleteChar(deletePos)
 		} else if deletePos.Line > 0 {
-			deletedText.WriteRune('\n')
 			deletePos = e.document.DeleteLine(deletePos)
 		}
 	}
 	
-	if deletedText.Len() == 0 {
-		return
-	}
-	
-	// Create change record
-	change := Change{
-		Type:      ChangeDelete,
-		BufferPos:  deletePos,
-		OldText:   deletedText.String(),
-		NewText:   "",
-		Timestamp: time.Now(),
-	}
-	
 	// Update cursor position
 	e.cursorManager.SetBufferPos(deletePos)
-	
-	// Add to history
-	e.history.AddChange(change, deletePos)
 	
 }
 
@@ -317,15 +279,6 @@ func (e *Editor) DeleteSelection() {
 	// Get selected text
 	selectedText := e.GetSelectionText()
 	
-	// Create change record
-	change := Change{
-		Type:      ChangeDelete,
-		BufferPos:  start,
-		OldText:   selectedText,
-		NewText:   "",
-		Timestamp: time.Now(),
-	}
-	
 	// Delete the selected text
 	// This is a simplified implementation - in practice you'd want to
 	// delete the entire selection range more efficiently
@@ -344,66 +297,8 @@ func (e *Editor) DeleteSelection() {
 		}
 	}
 	
-	// Add to history
-	e.history.AddChange(change, e.cursorManager.GetBufferPos())
-	
 }
 
-// Undo undoes the last change
-func (e *Editor) Undo() {
-	// Force end current group before undo
-	e.history.ForceEndGroup()
-	
-	entry, ok := e.history.Undo()
-	if !ok {
-		return
-	}
-	
-	// Apply reverse changes
-	for i := len(entry.Changes) - 1; i >= 0; i-- {
-		change := entry.Changes[i]
-		reversed := ReverseChange(change)
-		ApplyChange(e.document, reversed)
-	}
-	
-	// Restore cursor position
-	e.cursorManager.SetBufferPos(entry.Cursor)
-	
-}
-
-// Redo redoes the next change
-func (e *Editor) Redo() {
-	// Force end current group before redo
-	e.history.ForceEndGroup()
-	
-	entry, ok := e.history.Redo()
-	if !ok {
-		return
-	}
-	
-	// Apply changes
-	for _, change := range entry.Changes {
-		ApplyChange(e.document, change)
-	}
-	
-	// Restore cursor position
-	e.cursorManager.SetBufferPos(entry.Cursor)
-	
-}
-
-// CanUndo returns true if there are changes to undo
-func (e *Editor) CanUndo() bool {
-	// Force end current group to get accurate undo state
-	e.history.ForceEndGroup()
-	return e.history.CanUndo()
-}
-
-// CanRedo returns true if there are changes to redo
-func (e *Editor) CanRedo() bool {
-	// Force end current group to get accurate redo state
-	e.history.ForceEndGroup()
-	return e.history.CanRedo()
-}
 
 // GetVisibleLines returns the lines that should be visible in the viewport
 func (e *Editor) GetVisibleLines() []string {

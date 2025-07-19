@@ -5,14 +5,14 @@ Implement AST-based document model with cursor management and editing operations
 
 ## Deliverables
 - Document model with efficient text operations
-- Undo/redo functionality
+- ~~Undo/redo functionality~~ (REMOVED in later refactor)
 - Text selection and clipboard support
 
 ## Tasks
 - Design AST-based document structure
 - Implement cursor position tracking
 - Add text insertion/deletion with proper cursor updates
-- Create undo/redo stack with change tracking
+- ~~Create undo/redo stack with change tracking~~ (REMOVED in later refactor)
 - Implement text selection (shift+arrows, mouse)
 - Add clipboard operations (Ctrl+C/X/V)
 - Implement line numbers display toggle
@@ -20,7 +20,7 @@ Implement AST-based document model with cursor management and editing operations
 
 ## Success Criteria
 - Smooth text editing with proper cursor behavior
-- Working undo/redo (Ctrl+Z/Y)
+- ~~Working undo/redo (Ctrl+Z/Y)~~ (REMOVED in later refactor)
 - Can select, copy, cut, and paste text
 - Line numbers can be toggled on/off
 
@@ -36,7 +36,7 @@ Successfully implemented the core document model:
 - ✅ Designed AST-based document structure with Line and Token types
 - ✅ Implemented cursor position tracking with proper unicode support
 - ✅ Added text insertion/deletion with proper cursor updates
-- ✅ Created undo/redo stack with change tracking and automatic grouping
+- ✅ ~~Created undo/redo stack with change tracking and automatic grouping~~ (REMOVED in later refactor)
 - ✅ Implemented text selection with shift+arrows and Ctrl+A
 - ✅ Added clipboard operations (Ctrl+C/X/V)
 - ✅ Implemented line numbers display toggle (Ctrl+L)
@@ -47,10 +47,13 @@ Successfully implemented the core document model:
 **Status: COMPLETED**
 All deliverables have been successfully implemented. The editor now has:
 - Proper AST-based document model with unicode support
-- Working undo/redo (Ctrl+Z/Y) with automatic change grouping
+- ~~Working undo/redo (Ctrl+Z/Y) with automatic change grouping~~ (REMOVED in later refactor)
 - Text selection with shift+arrows, Ctrl+A, and Escape to clear
 - Copy/cut/paste operations working correctly
 - Line numbers that can be toggled on/off
 - Efficient rendering and viewport management
 
 The core document model is now ready for the next phase of development.
+
+## 2025-07-19 (Post-Completion Update)
+The undo/redo system was completely removed from the codebase as part of a clean architecture refactor. All references to history tracking, change management, and undo/redo functionality have been eliminated.

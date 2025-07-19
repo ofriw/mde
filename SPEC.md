@@ -46,7 +46,7 @@ graph TB
 
 ### 2. Document Model
 - **AST-based** document representation
-- **Cursor management** with undo/redo
+- **Cursor management** with selection support
 - **Live preview** synchronization
 
 ```go
@@ -54,7 +54,6 @@ type Document struct {
     AST      ast.Node
     Content  string
     Cursor   Position
-    History  []Change
 }
 ```
 
@@ -141,8 +140,6 @@ func init() {
   - Ctrl+C: Copy
   - Ctrl+X: Cut  
   - Ctrl+V: Paste
-  - Ctrl+Z: Undo
-  - Ctrl+Y: Redo
   - Ctrl+F: Find
   - Ctrl+H: Find & Replace
 - **Navigation**:

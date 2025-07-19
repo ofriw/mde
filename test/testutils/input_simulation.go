@@ -163,10 +163,6 @@ func (is *InputSimulator) keyToMessage(key string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlV}
 	case "ctrl+x":
 		return tea.KeyMsg{Type: tea.KeyCtrlX}
-	case "ctrl+z":
-		return tea.KeyMsg{Type: tea.KeyCtrlZ}
-	case "ctrl+y":
-		return tea.KeyMsg{Type: tea.KeyCtrlY}
 	case "ctrl+f":
 		return tea.KeyMsg{Type: tea.KeyCtrlF}
 	case "ctrl+g":
@@ -225,8 +221,6 @@ var (
 	DuplicateLine  = NewKeySequence("ctrl+d")
 	CopyLine       = NewKeySequence("ctrl+c")
 	PasteLine      = NewKeySequence("ctrl+v")
-	Undo           = NewKeySequence("ctrl+z")
-	Redo           = NewKeySequence("ctrl+y")
 	
 	// Common text patterns
 	LoremIpsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."

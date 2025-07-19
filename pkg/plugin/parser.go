@@ -13,9 +13,6 @@ type ParserPlugin interface {
 	// Parse parses markdown text into an AST
 	Parse(ctx context.Context, text string) (*ast.Document, error)
 	
-	// ParseIncremental parses only changed sections for efficiency
-	ParseIncremental(ctx context.Context, doc *ast.Document, changes []ast.Change) error
-	
 	// GetSyntaxHighlighting returns syntax highlighting tokens for a line
 	GetSyntaxHighlighting(ctx context.Context, line string) ([]ast.Token, error)
 	
