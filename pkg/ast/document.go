@@ -523,30 +523,88 @@ func (d *Document) MoveCursorToDocumentEnd(pos BufferPos) BufferPos {
 func (d *Document) MoveCursorWordLeft(pos BufferPos) BufferPos {
 	pos = d.ValidatePosition(pos)
 	
-	if pos.Col == 0 {
-		if pos.Line > 0 {
-			prevLine := pos.Line - 1
-			return BufferPos{Line: prevLine, Col: d.GetLineLength(prevLine)}
-		}
-		return pos
+	line := d.lines[pos.Line]
+	runes := []rune(line.text)
+	col := pos.Col
+	
+	if col > len(runes) {
+		col = len(runes)
 	}
 	
-	return d.FindWordStart(pos)
+	// Step 1: Skip backwards over whitespace (may cross lines)
+	for {
+		// Skip whitespace on current line
+		for col > 0 && unicode.IsSpace(runes[col-1]) {
+			col--
+		}
+		
+		// If we found a non-space character, break to handle the word
+		if col > 0 {
+			break
+		}
+		
+		// If we're at start of line, move to previous line
+		if pos.Line > 0 {
+			pos.Line--
+			line = d.lines[pos.Line]
+			runes = []rune(line.text)
+			col = len(runes)
+			
+			// Continue loop to skip whitespace on previous line
+		} else {
+			// We're at the start of the document
+			return BufferPos{Line: 0, Col: 0}
+		}
+	}
+	
+	// Step 2: Skip backwards over the current word
+	for col > 0 && !unicode.IsSpace(runes[col-1]) {
+		col--
+	}
+	
+	return BufferPos{Line: pos.Line, Col: col}
 }
 
 // MoveCursorWordRight moves cursor to start of next word.
 func (d *Document) MoveCursorWordRight(pos BufferPos) BufferPos {
 	pos = d.ValidatePosition(pos)
 	
-	lineLength := d.GetLineLength(pos.Line)
-	if pos.Col >= lineLength {
-		if pos.Line < d.LineCount()-1 {
-			return BufferPos{Line: pos.Line + 1, Col: 0}
-		}
-		return pos
+	// Step 1: Skip forward over the current word on current line
+	line := d.lines[pos.Line]
+	runes := []rune(line.text)
+	col := pos.Col
+	
+	// Skip over current word
+	for col < len(runes) && !unicode.IsSpace(runes[col]) {
+		col++
 	}
 	
-	return d.FindWordEnd(pos)
+	// Step 2: Skip forward over whitespace (may cross lines)
+	for {
+		// Skip whitespace on current line
+		for col < len(runes) && unicode.IsSpace(runes[col]) {
+			col++
+		}
+		
+		// If we found a non-space character, we're done
+		if col < len(runes) {
+			return BufferPos{Line: pos.Line, Col: col}
+		}
+		
+		// If we're at end of line, move to next line
+		if pos.Line < d.LineCount()-1 {
+			pos.Line++
+			col = 0
+			line = d.lines[pos.Line]
+			runes = []rune(line.text)
+			
+			// If next line is empty or all whitespace, continue loop
+			// If next line has content, we'll find it in the next iteration
+		} else {
+			// We're at the last line and reached the end
+			return BufferPos{Line: pos.Line, Col: len(runes)}
+		}
+	}
 }
 
 // GetSelectionText returns the text content of a selection.

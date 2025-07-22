@@ -2,7 +2,6 @@ package ast
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -83,6 +82,9 @@ func (e *Editor) SetViewPort(width, height int) {
 	newViewport := e.viewport.WithDimensions(width, height)
 	e.viewport = newViewport
 	e.cursorManager.UpdateViewport(newViewport)
+	
+	// Ensure cursor is still visible after resize
+	e.AdjustViewPort()
 }
 
 // ToggleLineNumbers toggles line number display
@@ -167,7 +169,7 @@ func (e *Editor) LoadFile(filename string) error {
 		content = []byte{}
 	} else {
 		var err error
-		content, err = ioutil.ReadFile(filename)
+		content, err = os.ReadFile(filename)
 		if err != nil {
 			return fmt.Errorf("failed to read file %s: %w", filename, err)
 		}
@@ -195,7 +197,7 @@ func (e *Editor) SaveFile(filename string) error {
 	}
 	
 	content := e.document.GetText()
-	err := ioutil.WriteFile(filename, []byte(content), 0644)
+	err := os.WriteFile(filename, []byte(content), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filename, err)
 	}
@@ -380,6 +382,67 @@ func (e *Editor) AdjustViewPort() {
 	}
 }
 
+
+// ScrollViewportUp scrolls the viewport up by the specified number of lines
+// without moving the cursor position. The cursor remains at the same buffer position.
+func (e *Editor) ScrollViewportUp(lines int) {
+	newTopLine := e.viewport.GetTopLine() - lines
+	if newTopLine < 0 {
+		newTopLine = 0
+	}
+	
+	if newTopLine != e.viewport.GetTopLine() {
+		newViewport := e.viewport.WithTopLine(newTopLine)
+		e.viewport = newViewport
+		e.cursorManager.UpdateViewport(newViewport)
+	}
+}
+
+// ScrollViewportDown scrolls the viewport down by the specified number of lines
+// without moving the cursor position. The cursor remains at the same buffer position.
+func (e *Editor) ScrollViewportDown(lines int) {
+	maxTopLine := e.document.LineCount() - 1
+	newTopLine := e.viewport.GetTopLine() + lines
+	
+	// Don't scroll past the end of the document
+	if newTopLine > maxTopLine {
+		newTopLine = maxTopLine
+	}
+	
+	if newTopLine != e.viewport.GetTopLine() {
+		newViewport := e.viewport.WithTopLine(newTopLine)
+		e.viewport = newViewport
+		e.cursorManager.UpdateViewport(newViewport)
+	}
+}
+
+// ScrollViewportLeft scrolls the viewport left by the specified number of columns
+// without moving the cursor position. The cursor remains at the same buffer position.
+func (e *Editor) ScrollViewportLeft(cols int) {
+	newLeftColumn := e.viewport.GetLeftColumn() - cols
+	if newLeftColumn < 0 {
+		newLeftColumn = 0
+	}
+	
+	if newLeftColumn != e.viewport.GetLeftColumn() {
+		newViewport := e.viewport.WithLeftColumn(newLeftColumn)
+		e.viewport = newViewport
+		e.cursorManager.UpdateViewport(newViewport)
+	}
+}
+
+// ScrollViewportRight scrolls the viewport right by the specified number of columns
+// without moving the cursor position. The cursor remains at the same buffer position.
+func (e *Editor) ScrollViewportRight(cols int) {
+	newLeftColumn := e.viewport.GetLeftColumn() + cols
+	
+	// We don't limit horizontal scrolling as lines can be arbitrarily long
+	if newLeftColumn != e.viewport.GetLeftColumn() {
+		newViewport := e.viewport.WithLeftColumn(newLeftColumn)
+		e.viewport = newViewport
+		e.cursorManager.UpdateViewport(newViewport)
+	}
+}
 
 // GetCursorBufferPosition returns the cursor position in buffer coordinates
 func (e *Editor) GetCursorBufferPosition() BufferPos {

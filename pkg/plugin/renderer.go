@@ -6,16 +6,56 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// RenderContext provides all necessary context for viewport-aware rendering.
+// This structure encapsulates the document, viewport, and display settings,
+// allowing renderers to efficiently render only the visible portion of a document.
+//
+// DESIGN RATIONALE:
+// Previously, renderers would process entire documents and the TUI would discard
+// non-visible content. This was inefficient for large files and broke scrolling
+// because the viewport position was ignored during rendering.
+//
+// With RenderContext, renderers receive explicit viewport boundaries and can
+// optimize by only processing visible lines. This fixes scrolling issues and
+// improves performance for large documents.
+type RenderContext struct {
+	// Document is the source document to render
+	Document *ast.Document
+	
+	// Viewport defines the visible region of the document
+	// This includes TopLine, LeftColumn, Width, and Height
+	Viewport *ast.Viewport
+	
+	// ShowLineNumbers indicates whether to render line number prefixes
+	// When true, renderers should add line numbers and account for their width
+	// in horizontal scrolling calculations
+	ShowLineNumbers bool
+}
+
 // RendererPlugin defines the interface for document renderers
 type RendererPlugin interface {
 	// Name returns the plugin name
 	Name() string
 	
-	// Render renders the document
-	Render(ctx context.Context, doc *ast.Document) ([]RenderedLine, error)
+	// RenderVisible renders only the visible portion of the document defined by the viewport.
+	// This is the primary rendering method that should be used for editor content.
+	//
+	// IMPLEMENTATION NOTES:
+	// - Renderers MUST respect the viewport boundaries (TopLine to TopLine+Height)
+	// - Line numbers should be added if ShowLineNumbers is true in the context
+	// - Horizontal scrolling (LeftColumn) should be applied after line numbers
+	// - The returned slice should contain exactly the visible lines, no more, no less
+	RenderVisible(ctx context.Context, renderCtx *RenderContext) ([]RenderedLine, error)
 	
-	// RenderPreview renders a preview of the document
-	RenderPreview(ctx context.Context, doc *ast.Document) ([]RenderedLine, error)
+	// RenderPreviewVisible renders the visible portion of the document in preview mode.
+	// This method applies markdown formatting and other preview-specific transformations
+	// while still respecting the viewport boundaries.
+	//
+	// IMPLEMENTATION NOTES:
+	// - Preview mode typically doesn't show line numbers
+	// - Markdown formatting should be applied (headers, bold, italic, etc.)
+	// - Viewport boundaries must still be respected for performance
+	RenderPreviewVisible(ctx context.Context, renderCtx *RenderContext) ([]RenderedLine, error)
 	
 	// RenderLine renders a single line with syntax highlighting
 	RenderLine(ctx context.Context, line string, tokens []ast.Token) (RenderedLine, error)
