@@ -3,10 +3,10 @@
 Terminal markdown editor with plugin architecture for parsing and rendering. Uses ANSI escape sequences for styling.
 
 ## Architecture
-- **Bubble Tea** TUI with Elm Architecture - single flat Model
+- **Bubble Tea v2** TUI with Elm Architecture - single flat Model
 - **Internal plugins** - compiled into binary (no dynamic loading)
 - **AST-based** document model with goldmark parser
-- **Non-modal** editing with micro-style keybindings
+- **Non-modal** editing with standard keyboard shortcuts
 
 ## Key Commands
 ```bash
@@ -45,6 +45,14 @@ make install    # Install locally
 
 ## Current Focus
 Check `tickets/` for active work. One task in progress at a time.
+
+## Key Bindings
+- `Ctrl+S` - Save file
+- `Ctrl+O` - Open file
+- `Ctrl+Q` - Quit (prompts if unsaved)
+- `Ctrl+C` - Copy selection or quit if no selection
+- `Alt+Left/Right` - Move cursor by word
+- Mouse support for click, scroll, and selection
 
 ## Coordinate System (Critical for Cursor Issues)
 
