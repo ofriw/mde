@@ -88,15 +88,61 @@ func (r *TerminalRenderer) Configure(options map[string]interface{}) error {
 	return nil
 }
 
-// Render renders the document
-func (r *TerminalRenderer) Render(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
-	lines := make([]plugin.RenderedLine, 0, doc.LineCount())
+
+// RenderVisible renders only visible lines from the viewport.
+//
+// CRITICAL: This method ADDS LINE NUMBERS to content. It's the only place
+// in the rendering pipeline that does this.
+//
+// RESPONSIBILITIES:
+// - Extract visible lines based on viewport (startLine to endLine)
+// - Add line numbers if ShowLineNumbers is true
+// - Apply horizontal scrolling while preserving line numbers
+//
+// FOR LLM: After this method, RenderedLine.Content includes line numbers.
+func (r *TerminalRenderer) RenderVisible(ctx context.Context, renderCtx *plugin.RenderContext) ([]plugin.RenderedLine, error) {
+	viewport := renderCtx.Viewport
+	doc := renderCtx.Document
 	
-	for i := 0; i < doc.LineCount(); i++ {
-		line := doc.GetLine(i)
+	// Calculate the range of lines to render based on viewport
+	startLine := viewport.GetTopLine()
+	endLine := startLine + viewport.GetHeight()
+	
+	// Ensure we don't go beyond document bounds
+	if startLine < 0 {
+		startLine = 0
+	}
+	if endLine > doc.LineCount() {
+		endLine = doc.LineCount()
+	}
+	
+	// Handle edge case: viewport starts beyond document end
+	if startLine >= doc.LineCount() {
+		return []plugin.RenderedLine{}, nil
+	}
+	
+	// Pre-allocate slice for visible lines
+	lines := make([]plugin.RenderedLine, 0, endLine-startLine)
+	
+	// Process only the visible lines
+	for i := startLine; i < endLine; i++ {
+		lineContent := doc.GetLine(i)
 		
-		// For now, render as plain text with basic styling
-		renderedLine, err := r.renderTextLine(line)
+		// Add line numbers if enabled
+		if renderCtx.ShowLineNumbers {
+			// Format line number with proper width and separator
+			// Use same format as editor: "%Nd │ " (includes space after │)
+			lineNumStr := fmt.Sprintf("%*d│ ", viewport.GetLineNumberWidth()-2, i+1)
+			lineContent = lineNumStr + lineContent
+		}
+		
+		// Apply horizontal scrolling
+		if viewport.GetLeftColumn() > 0 {
+			lineContent = r.applyHorizontalScroll(lineContent, viewport.GetLeftColumn(), renderCtx.ShowLineNumbers, viewport.GetLineNumberWidth())
+		}
+		
+		// Render the line with syntax highlighting (future enhancement)
+		renderedLine, err := r.renderTextLine(lineContent)
 		if err != nil {
 			return nil, fmt.Errorf("failed to render line %d: %w", i, err)
 		}
@@ -107,21 +153,105 @@ func (r *TerminalRenderer) Render(ctx context.Context, doc *ast.Document) ([]plu
 	return lines, nil
 }
 
-// RenderPreview renders a preview of the document with markdown formatting
-func (r *TerminalRenderer) RenderPreview(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
-	// Get the raw text content
+// RenderPreviewVisible implements viewport-aware rendering for preview mode.
+// This method renders markdown with formatting while respecting viewport boundaries.
+//
+// PREVIEW MODE DIFFERENCES:
+// - No line numbers are shown
+// - Markdown formatting is applied (headers, emphasis, etc.)
+// - Content is rendered for display, not editing
+func (r *TerminalRenderer) RenderPreviewVisible(ctx context.Context, renderCtx *plugin.RenderContext) ([]plugin.RenderedLine, error) {
+	viewport := renderCtx.Viewport
+	doc := renderCtx.Document
+	
+	// For preview mode, we need to work with the full markdown text
+	// to properly parse markdown elements that might span multiple lines
 	markdownText := doc.GetText()
+	allLines := strings.Split(markdownText, "\n")
 	
-	// Parse markdown and render with formatting
-	lines := strings.Split(markdownText, "\n")
-	renderedLines := make([]plugin.RenderedLine, 0, len(lines))
+	// Calculate visible range
+	startLine := viewport.GetTopLine()
+	endLine := startLine + viewport.GetHeight()
 	
-	for _, line := range lines {
+	// Ensure bounds are valid
+	if startLine < 0 {
+		startLine = 0
+	}
+	if endLine > len(allLines) {
+		endLine = len(allLines)
+	}
+	if startLine >= len(allLines) {
+		return []plugin.RenderedLine{}, nil
+	}
+	
+	// Extract visible lines
+	visibleLines := allLines[startLine:endLine]
+	renderedLines := make([]plugin.RenderedLine, 0, len(visibleLines))
+	
+	// Render each visible line with markdown formatting
+	for _, line := range visibleLines {
 		renderedLine := r.renderMarkdownLine(line)
+		
+		// Apply horizontal scrolling to preview content
+		if viewport.GetLeftColumn() > 0 && len(renderedLine.Content) > viewport.GetLeftColumn() {
+			// For preview mode, we simply trim from the left
+			renderedLine.Content = renderedLine.Content[viewport.GetLeftColumn():]
+			
+			// Adjust style ranges for horizontal scroll
+			for j := range renderedLine.Styles {
+				renderedLine.Styles[j].Start -= viewport.GetLeftColumn()
+				renderedLine.Styles[j].End -= viewport.GetLeftColumn()
+				
+				// Clamp to visible range
+				if renderedLine.Styles[j].Start < 0 {
+					renderedLine.Styles[j].Start = 0
+				}
+				if renderedLine.Styles[j].End < 0 {
+					renderedLine.Styles[j].End = 0
+				}
+			}
+		}
+		
 		renderedLines = append(renderedLines, renderedLine)
 	}
 	
 	return renderedLines, nil
+}
+
+// applyHorizontalScroll applies horizontal scrolling to a line while preserving line numbers.
+// This is a helper method that handles the complexity of scrolling content while keeping
+// line numbers visible.
+//
+// ALGORITHM:
+// 1. If line numbers are shown, preserve them during horizontal scroll
+// 2. Apply the scroll offset only to the content portion
+// 3. Handle edge cases where content is shorter than scroll offset
+func (r *TerminalRenderer) applyHorizontalScroll(line string, leftColumn int, hasLineNumbers bool, lineNumberWidth int) string {
+	if !hasLineNumbers {
+		// Simple case: no line numbers, just trim from left
+		if len(line) > leftColumn {
+			return line[leftColumn:]
+		}
+		return ""
+	}
+	
+	// Complex case: preserve line numbers while scrolling content
+	if len(line) <= lineNumberWidth {
+		// Line only contains line number (or less), return as-is
+		return line
+	}
+	
+	// Split line number and content
+	lineNumPart := line[:lineNumberWidth]
+	contentPart := line[lineNumberWidth:]
+	
+	// Apply scroll to content portion only
+	if len(contentPart) > leftColumn {
+		return lineNumPart + contentPart[leftColumn:]
+	}
+	
+	// Content is entirely scrolled off, but keep line number
+	return lineNumPart
 }
 
 // renderMarkdownLine renders a single line with markdown formatting
@@ -349,20 +479,22 @@ func (r *TerminalRenderer) expandTabs(line string) string {
 	return result.String()
 }
 
-// RenderToString converts rendered lines to terminal output
+// RenderToString converts rendered lines to terminal output with proper styling.
+//
+// CRITICAL: This method does NOT add line numbers. Line numbers are already
+// included in RenderedLine.Content by RenderVisible/RenderPreviewVisible.
+//
+// RENDERING PIPELINE:
+// 1. RenderVisible/RenderPreviewVisible: Adds line numbers, applies viewport
+// 2. RenderToString/RenderToStringWithCursor: Applies styling and cursor
+//
+// FOR LLM: RenderedLine.Content already contains line numbers if enabled.
 func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine) string {
 	var result strings.Builder
 	
 	for i, line := range lines {
-		// Add line number if enabled
-		if r.config.ShowLineNumbers {
-			lineNumStr := r.formatLineNumber(i+1, len(lines))
-			lineNumStyle := plugin.Style{Foreground: getAccessibleColor(ColorGray)}
-			styledLineNum := lineNumStyle.ToLipgloss().Render(lineNumStr)
-			result.WriteString(styledLineNum)
-		}
-		
 		// Render the line content with styles
+		// NOTE: line.Content already includes line numbers if ShowLineNumbers is true
 		content := r.renderLineWithStyles(line)
 		result.WriteString(content)
 		
@@ -375,21 +507,22 @@ func (r *TerminalRenderer) RenderToString(lines []plugin.RenderedLine) string {
 	return result.String()
 }
 
-// RenderToStringWithCursor renders lines with cursor positioning
-// cursorRow, cursorCol are in screen coordinates (ScreenPos)
+// RenderToStringWithCursor renders lines with cursor at the specified position.
+//
+// CRITICAL: Like RenderToString, this method does NOT add line numbers.
+// Line numbers are already in RenderedLine.Content.
+//
+// PARAMETERS:
+// - cursorRow: Line index in 'lines' array (0-based)
+// - cursorCol: Column position within that line's Content string
+//
+// FOR LLM: cursorCol is already adjusted for line numbers by the caller.
 func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine, cursorRow, cursorCol int) string {
 	var result strings.Builder
 	
 	for i, line := range lines {
-		// Add line number if enabled
-		if r.config.ShowLineNumbers {
-			lineNumStr := r.formatLineNumber(i+1, len(lines))
-			lineNumStyle := plugin.Style{Foreground: getAccessibleColor(ColorGray)}
-			styledLineNum := lineNumStyle.ToLipgloss().Render(lineNumStr)
-			result.WriteString(styledLineNum)
-		}
-		
 		// Render the line content with styles, including cursor if on this line
+		// NOTE: line.Content already includes line numbers if ShowLineNumbers is true
 		if i == cursorRow {
 			content := r.renderLineWithStylesAndCursor(line, cursorCol)
 			result.WriteString(content)
@@ -416,12 +549,13 @@ func (r *TerminalRenderer) RenderToStringWithCursor(lines []plugin.RenderedLine,
 // - Within line: replace existing character with cursor → "He█lo"
 // - Empty line: extend with space, replace with cursor → "█"
 func (r *TerminalRenderer) renderLineWithStylesAndCursor(line plugin.RenderedLine, cursorCol int) string {
-	// ScreenPos coordinates are absolute screen positions, but we need position within line content
-	// Subtract line number offset to get position within the line content
+	// CRITICAL ARCHITECTURAL NOTE:
+	// Line numbers are already included in line.Content by RenderVisible.
+	// The cursorCol parameter is the position within line.Content where the cursor
+	// should be placed. No adjustment for line numbers is needed here.
+	
+	// Use cursorCol directly - it's already the correct position within line.Content
 	adjustedCursorCol := cursorCol
-	if r.config.ShowLineNumbers {
-		adjustedCursorCol -= r.config.LineNumberWidth
-	}
 	
 	// Bounds checking
 	if adjustedCursorCol < 0 {

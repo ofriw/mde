@@ -3,8 +3,10 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"unicode"
 	
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/ofri/mde/pkg/terminal"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -19,13 +21,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		
+		// Update editor viewport with content height (terminal height - UI chrome)
+		if m.editor != nil {
+			m.editor.SetViewPort(msg.Width, m.GetContentHeight())
+		}
+		
 		return m, nil
 
-	case tea.KeyMsg:
-		return m.handleKeyPress(msg)
+	case tea.KeyPressMsg:
+		return m.handleKeyInput(msg)
 		
-	case tea.MouseMsg:
-		return m.handleMouseEvent(msg)
+	case tea.KeyboardEnhancementsMsg:
+		return m, nil
+		
+	case tea.MouseClickMsg:
+		return m.handleMouseClick(msg)
+		
+	case tea.MouseReleaseMsg:
+		return m.handleMouseRelease(msg)
+		
+	case tea.MouseMotionMsg:
+		return m.handleMouseMotion(msg)
+		
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
 		
 	case fileLoadedMsg, fileSavedMsg, fileOpenPromptMsg:
 		return m.handleFileMsg(msg)
@@ -34,14 +54,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle modal states first
 	if m.mode != ModeNormal {
-		return m.handleModalKeyPress(msg)
+		return m.handleModalKeyInput(msg)
 	}
 	
-	switch msg.Type {
-	case tea.KeyCtrlC:
+	// Handle Alt+Arrow keys for word movement
+	if left, right := terminal.IsWordMovement(msg); left || right {
+		if left {
+			m.editor.MoveCursorWordLeft()
+		} else {
+			m.editor.MoveCursorWordRight()
+		}
+		return m, nil
+	}
+	
+	switch msg.String() {
+	case "ctrl+c":
 		if m.editor.GetCursor().HasSelection() {
 			m.editor.Copy()
 			m.showMessage("Copied")
@@ -49,7 +79,7 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-	case tea.KeyCtrlQ:
+	case "ctrl+q":
 		// Check if file has unsaved changes
 		if m.editor.GetDocument().IsModified() {
 			m.mode = ModeSavePrompt
@@ -58,62 +88,62 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 
-	case tea.KeyCtrlS:
+	case "ctrl+s":
 		return m, m.saveFile()
 
-	case tea.KeyCtrlO:
+	case "ctrl+o":
 		return m, m.openFile()
 
-	case tea.KeyCtrlV:
+	case "ctrl+v":
 		m.editor.Paste()
 
-	case tea.KeyCtrlX:
+	case "ctrl+x":
 		if m.editor.GetCursor().HasSelection() {
 			m.editor.Cut()
 			m.showMessage("Cut")
 		}
 
-	case tea.KeyUp:
+	case "up":
 		m.editor.MoveCursorUp()
 
-	case tea.KeyDown:
+	case "down":
 		m.editor.MoveCursorDown()
 
-	case tea.KeyLeft:
+	case "left":
 		m.editor.MoveCursorLeft()
 
-	case tea.KeyRight:
+	case "right":
 		m.editor.MoveCursorRight()
 
-	case tea.KeyShiftUp:
+	case "shift+up":
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
 		m.editor.MoveCursorUp()
 		m.editor.GetCursor().ExtendSelection()
 
-	case tea.KeyShiftDown:
+	case "shift+down":
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
 		m.editor.MoveCursorDown()
 		m.editor.GetCursor().ExtendSelection()
 
-	case tea.KeyShiftLeft:
+	case "shift+left":
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
 		m.editor.MoveCursorLeft()
 		m.editor.GetCursor().ExtendSelection()
 
-	case tea.KeyShiftRight:
+	case "shift+right":
 		if !m.editor.GetCursor().HasSelection() {
 			m.editor.GetCursor().StartSelection()
 		}
 		m.editor.MoveCursorRight()
 		m.editor.GetCursor().ExtendSelection()
 
-	case tea.KeyCtrlA:
+	case "ctrl+a":
 		// Select all
 		m.editor.GetCursor().StartSelection()
 		m.editor.MoveCursorToDocumentStart()
@@ -121,11 +151,11 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editor.MoveCursorToDocumentEnd()
 		m.editor.GetCursor().ExtendSelection()
 
-	case tea.KeyEscape:
+	case "escape":
 		// Clear selection
 		m.editor.GetCursor().ClearSelection()
 
-	case tea.KeyCtrlL:
+	case "ctrl+l":
 		// Toggle line numbers
 		m.editor.ToggleLineNumbers()
 		if m.editor.ShowLineNumbers() {
@@ -134,25 +164,25 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.showMessage("Line numbers disabled")
 		}
 		
-	case tea.KeyCtrlF:
+	case "ctrl+f":
 		// Enter find mode
 		m.mode = ModeFind
 		m.input = ""
 		m.caseSensitive = false
 		
-	case tea.KeyCtrlH:
+	case "ctrl+h":
 		// Enter replace mode
 		m.mode = ModeReplace
 		m.input = ""
 		m.replaceText = ""
 		m.caseSensitive = false
 		
-	case tea.KeyCtrlG:
+	case "ctrl+g":
 		// Enter goto mode
 		m.mode = ModeGoto
 		m.input = ""
 		
-	case tea.KeyCtrlP:
+	case "ctrl+p":
 		// Toggle preview mode
 		m.previewMode = !m.previewMode
 		if m.previewMode {
@@ -161,32 +191,35 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.showMessage("Preview mode disabled")
 		}
 		
-	case tea.KeyHome:
+	case "home":
 		m.editor.MoveCursorToLineStart()
 
-	case tea.KeyEnd:
+	case "end":
 		m.editor.MoveCursorToLineEnd()
 
-	case tea.KeyBackspace:
+	case "backspace":
 		m.editor.DeleteText(1)
 
-	case tea.KeyDelete:
+	case "delete":
 		pos := m.editor.GetCursor().GetBufferPos()
 		m.editor.MoveCursorRight()
 		m.editor.DeleteText(1)
 		m.editor.GetCursor().SetBufferPos(pos)
 
-	case tea.KeyEnter:
+	case "enter":
 		m.editor.InsertText("\n")
 
-	case tea.KeySpace:
+	case "space":
 		m.editor.InsertText(" ")
 
-	case tea.KeyTab:
+	case "tab":
 		m.editor.InsertText("\t")
 
-	case tea.KeyRunes:
-		m.editor.InsertText(msg.String())
+	default:
+		// Handle regular character input
+		if isPrintableCharacter(msg.String()) {
+			m.editor.InsertText(msg.String())
+		}
 	}
 
 	return m, nil
@@ -196,9 +229,18 @@ func (m *Model) showMessage(msg string) {
 	m.message = msg
 	m.messageTimer = 60 // Show for ~1 second at 60fps
 }
-func (m *Model) handleModalKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEscape:
+
+// isPrintableCharacter checks if the input represents a single printable character
+func isPrintableCharacter(s string) bool {
+	if len(s) != 1 {
+		return false
+	}
+	r := rune(s[0])
+	return unicode.IsPrint(r) && !unicode.IsControl(r)
+}
+func (m *Model) handleModalKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "escape":
 		// Exit modal mode
 		m.mode = ModeNormal
 		m.input = ""
@@ -206,7 +248,7 @@ func (m *Model) handleModalKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.savePromptContext = ""
 		return m, nil
 		
-	case tea.KeyEnter:
+	case "enter":
 		switch m.mode {
 		case ModeFind:
 			return m.handleFind()
@@ -217,29 +259,29 @@ func (m *Model) handleModalKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 		
-	case tea.KeyBackspace:
+	case "backspace":
 		// Remove last character from input
 		if len(m.input) > 0 {
 			m.input = m.input[:len(m.input)-1]
 		}
 		return m, nil
 		
-	case tea.KeySpace:
+	case "space":
 		// Add space to input
 		m.input += " "
 		return m, nil
 		
-	case tea.KeyRunes:
-		// Handle save prompt responses
+	default:
+		// Handle save prompt responses and regular character input
 		if m.mode == ModeSavePrompt {
 			return m.handleSavePrompt(msg.String())
 		}
-		// Add character to input
-		m.input += msg.String()
+		// Add character to input for other modes
+		if isPrintableCharacter(msg.String()) {
+			m.input += msg.String()
+		}
 		return m, nil
 	}
-	
-	return m, nil
 }
 
 func (m *Model) handleFind() (tea.Model, tea.Cmd) {
@@ -349,61 +391,101 @@ func (m *Model) handleSavePrompt(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleMouseEvent(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+
+func (m *Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// Only handle mouse events in normal mode
 	if m.mode != ModeNormal {
 		return m, nil
 	}
 	
-	switch msg.Button {
-	case tea.MouseButtonLeft:
-		if msg.Action == tea.MouseActionPress {
-			// Handle left click - position cursor
-			return m.handleMouseClick(msg)
-		} else if msg.Action == tea.MouseActionMotion {
-			// Handle mouse drag for selection
-			return m.handleMouseDrag(msg)
-		}
-		
-	case tea.MouseButtonWheelUp:
-		// Scroll up
-		for i := 0; i < 3; i++ {
-			m.editor.MoveCursorUp()
-		}
-		
-	case tea.MouseButtonWheelDown:
-		// Scroll down
-		for i := 0; i < 3; i++ {
-			m.editor.MoveCursorDown()
-		}
+	mouse := msg.Mouse()
+	
+	// Only handle left button clicks
+	if mouse.Button != tea.MouseLeft {
+		return m, nil
 	}
 	
-	return m, nil
-}
-
-func (m *Model) handleMouseClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// Use safe coordinate transformation
-	bufferPos := m.screenToBufferSafe(msg.Y, msg.X)
+	// Position cursor at click location
+	bufferPos := m.screenToBufferSafe(mouse.Y, mouse.X)
 	
 	// Clear any existing selection and move cursor
 	m.editor.GetCursor().ClearSelection()
 	m.editor.GetCursor().SetBufferPos(bufferPos)
 	
+	// Track for potential drag
+	m.mouseStartPos = &bufferPos
+	m.isDragging = false
+	
 	return m, nil
 }
 
-func (m *Model) handleMouseDrag(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// Use safe coordinate transformation
-	bufferPos := m.screenToBufferSafe(msg.Y, msg.X)
-	
-	// Start selection if not already started
-	if !m.editor.GetCursor().HasSelection() {
-		m.editor.GetCursor().StartSelection()
+func (m *Model) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) {
+	// Only handle mouse events in normal mode
+	if m.mode != ModeNormal {
+		return m, nil
 	}
 	
-	// Move cursor to dragged position and extend selection
+	// End drag selection
+	m.isDragging = false
+	m.mouseStartPos = nil
+	return m, nil
+}
+
+func (m *Model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
+	// Only handle mouse events in normal mode
+	if m.mode != ModeNormal {
+		return m, nil
+	}
+	
+	if m.mouseStartPos == nil {
+		return m, nil
+	}
+	
+	mouse := msg.Mouse()
+	
+	// Convert screen coordinates to buffer position
+	bufferPos := m.screenToBufferSafe(mouse.Y, mouse.X)
+	
+	if !m.isDragging {
+		// Start selection on first motion
+		m.editor.GetCursor().StartSelection()
+		m.isDragging = true
+	}
+	
+	// Update cursor and extend selection
 	m.editor.GetCursor().SetBufferPos(bufferPos)
 	m.editor.GetCursor().ExtendSelection()
+	
+	return m, nil
+}
+
+func (m *Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	// Only handle mouse events in normal mode
+	if m.mode != ModeNormal {
+		return m, nil
+	}
+	
+	const scrollAmount = 3 // Standard amount - matches vim and bubbles/viewport
+	
+	mouse := msg.Mouse()
+	
+	switch mouse.Button {
+	case tea.MouseWheelUp:
+		// Scroll viewport up 3 lines (standard) - content moves down
+		m.editor.ScrollViewportUp(scrollAmount)
+		
+	case tea.MouseWheelDown:
+		// Scroll viewport down 3 lines (standard) - content moves up
+		m.editor.ScrollViewportDown(scrollAmount)
+		
+	case tea.MouseWheelLeft:
+		// Horizontal scroll left - typically 2 columns is standard
+		m.editor.ScrollViewportLeft(2)
+		
+	case tea.MouseWheelRight:
+		// Horizontal scroll right - typically 2 columns is standard
+		m.editor.ScrollViewportRight(2)
+	}
 	
 	return m, nil
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
@@ -36,6 +36,10 @@ type Model struct {
 	
 	// Preview mode
 	previewMode  bool
+	
+	// Mouse state tracking
+	mouseStartPos *ast.BufferPos // Starting position for drag selection
+	isDragging    bool            // Whether we're currently dragging
 }
 
 type EditorMode int
@@ -87,7 +91,18 @@ func (m *Model) ConvertHTMLToTerminalText(htmlContent string) string {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return nil
+	return tea.RequestKeyReleases
+}
+
+// GetContentHeight returns the available height for editor content.
+// Terminal height minus UI chrome (status bar + help bar = 2 lines).
+func (m *Model) GetContentHeight() int {
+	const uiChromeHeight = 2 // status bar (1) + help bar (1)
+	contentHeight := m.height - uiChromeHeight
+	if contentHeight < 1 {
+		contentHeight = 1 // minimum height
+	}
+	return contentHeight
 }
 
 func (m *Model) View() string {
@@ -95,13 +110,7 @@ func (m *Model) View() string {
 		return m.err.Error()
 	}
 
-	// Update editor viewport
-	viewportHeight := m.height - 2
-	if viewportHeight < 1 {
-		viewportHeight = 1
-	}
-	m.editor.SetViewPort(m.width, viewportHeight)
-	m.editor.AdjustViewPort()
+	// Viewport is now updated only when window size changes
 	
 	// Render content based on mode
 	var content string
@@ -124,10 +133,7 @@ func (m *Model) View() string {
 // Plugins are compiled into the binary and cannot fail at runtime unless there's a programming error.
 // Any plugin errors indicate a bug and should crash with explicit errors.
 func (m *Model) renderEditorContent() string {
-	editorHeight := m.height - 2
-	if editorHeight < 1 {
-		editorHeight = 1
-	}
+	editorHeight := m.GetContentHeight()
 	
 	// Get renderer plugin - must exist as it's compiled into the binary
 	registry := plugin.GetRegistry()
@@ -141,11 +147,21 @@ func (m *Model) renderEditorContent() string {
 		panic(fmt.Sprintf("FATAL: Failed to configure renderer: %v\nThis is a programming error - renderer configuration should never fail", err))
 	}
 	
-	// Render the document using plugins
+	// Create render context with viewport information
+	// This ensures we only render what's visible, fixing scrolling issues
+	// and improving performance for large documents
+	renderCtx := &plugin.RenderContext{
+		Document:        m.editor.GetDocument(),
+		Viewport:        m.editor.GetViewport(),
+		ShowLineNumbers: m.editor.ShowLineNumbers(),
+	}
+	
+	// Render only the visible portion of the document
+	// This is the key fix for scrolling - we now respect the viewport boundaries
 	ctx := context.Background()
-	renderedLines, err := renderer.Render(ctx, m.editor.GetDocument())
+	renderedLines, err := renderer.RenderVisible(ctx, renderCtx)
 	if err != nil {
-		panic(fmt.Sprintf("FATAL: Renderer failed to render document: %v\nThis is a programming error - internal renderer should never fail", err))
+		panic(fmt.Sprintf("FATAL: Renderer failed to render visible content: %v\nThis is a programming error - internal renderer should never fail", err))
 	}
 	
 	// Convert rendered lines to string and add cursor
@@ -173,10 +189,7 @@ func (m *Model) renderEditorContent() string {
 // renderPreviewContent renders the markdown content in preview mode
 // Uses the internal plugin system for consistent rendering
 func (m *Model) renderPreviewContent() string {
-	editorHeight := m.height - 2
-	if editorHeight < 1 {
-		editorHeight = 1
-	}
+	editorHeight := m.GetContentHeight()
 	
 	// Get renderer plugin - must exist as it's compiled into the binary
 	registry := plugin.GetRegistry()
@@ -190,43 +203,31 @@ func (m *Model) renderPreviewContent() string {
 		panic(fmt.Sprintf("FATAL: Failed to configure renderer: %v\nThis is a programming error - renderer configuration should never fail", err))
 	}
 	
-	// Render the document using plugins in preview mode
+	// Create render context for preview mode
+	// Preview mode doesn't show line numbers but still respects viewport boundaries
+	renderCtx := &plugin.RenderContext{
+		Document:        m.editor.GetDocument(),
+		Viewport:        m.editor.GetViewport(),
+		ShowLineNumbers: false, // Preview mode never shows line numbers
+	}
+	
+	// Render only the visible portion of the document in preview mode
+	// This fixes scrolling in preview mode and improves performance
 	ctx := context.Background()
-	renderedLines, err := renderer.RenderPreview(ctx, m.editor.GetDocument())
+	renderedLines, err := renderer.RenderPreviewVisible(ctx, renderCtx)
 	if err != nil {
-		panic(fmt.Sprintf("FATAL: Renderer failed to render document in preview mode: %v\nThis is a programming error - internal renderer should never fail", err))
+		panic(fmt.Sprintf("FATAL: Renderer failed to render preview content: %v\nThis is a programming error - internal renderer should never fail", err))
 	}
 	
-	// Apply viewport
-	viewport := m.editor.GetViewport()
-	startLine := viewport.GetTopLine()
-	endLine := startLine + editorHeight
-	
-	if startLine >= len(renderedLines) {
-		startLine = len(renderedLines) - 1
-		if startLine < 0 {
-			startLine = 0
-		}
+	// The renderer now returns only visible lines, so we can use them directly
+	// Pad to fill editor height if needed
+	for len(renderedLines) < editorHeight {
+		renderedLines = append(renderedLines, plugin.RenderedLine{Content: "", Styles: nil})
 	}
 	
-	if endLine > len(renderedLines) {
-		endLine = len(renderedLines)
-	}
-	
-	// Get visible lines
-	var visibleLines []plugin.RenderedLine
-	if startLine < len(renderedLines) {
-		visibleLines = renderedLines[startLine:endLine]
-	}
-	
-	// Pad to fill editor height
-	for len(visibleLines) < editorHeight {
-		visibleLines = append(visibleLines, plugin.RenderedLine{Content: "", Styles: nil})
-	}
-	
-	// Trim to exact height
-	if len(visibleLines) > editorHeight {
-		visibleLines = visibleLines[:editorHeight]
+	// Trim to exact height (safety measure)
+	if len(renderedLines) > editorHeight {
+		renderedLines = renderedLines[:editorHeight]
 	}
 	
 	// Use the renderer's RenderToString method to convert to terminal output
@@ -235,7 +236,7 @@ func (m *Model) renderPreviewContent() string {
 	if !ok {
 		panic(fmt.Sprintf("FATAL: Renderer is not a TerminalRenderer: got %T\nThis is a programming error - only TerminalRenderer is supported", renderer))
 	}
-	content := terminalRenderer.RenderToString(visibleLines)
+	content := terminalRenderer.RenderToString(renderedLines)
 	
 	// No background styling - use terminal's default
 	editorStyle := lipgloss.NewStyle().Width(m.width).Height(editorHeight)
@@ -457,10 +458,15 @@ func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, rende
 		panic(fmt.Sprintf("FATAL: Renderer is not a TerminalRenderer: got %T\nThis is a programming error - only TerminalRenderer is supported", renderer))
 	}
 	
-	// Get cursor screen position
-	screenPos, err := m.editor.GetCursor().GetScreenPos()
-	if err != nil {
-		// Cursor not visible in viewport - render without cursor
+	// Get cursor position and viewport for calculation
+	cursorPos := m.editor.GetCursor().GetBufferPos()
+	viewport := m.editor.GetViewport()
+	
+	// Check if cursor is within the visible viewport
+	// This is critical because we only render visible lines now
+	if cursorPos.Line < viewport.GetTopLine() || 
+	   cursorPos.Line >= viewport.GetTopLine() + viewport.GetHeight() {
+		// Cursor is outside the visible area - render without cursor
 		lines := make([]string, len(renderedLines))
 		for i, line := range renderedLines {
 			lines[i] = line.Content
@@ -468,7 +474,21 @@ func (m *Model) renderLinesWithCursor(renderedLines []plugin.RenderedLine, rende
 		return strings.Join(lines, "\n")
 	}
 	
-	return terminalRenderer.RenderToStringWithCursor(renderedLines, screenPos.Row, screenPos.Col)
+	// Calculate cursor position relative to the rendered lines
+	// Since we only render visible lines, the cursor row is relative to viewport top
+	cursorRow := cursorPos.Line - viewport.GetTopLine()
+	cursorCol := cursorPos.Col
+	
+	// The renderer has already applied horizontal scrolling and line numbers
+	// So we need to use the screen position's column which accounts for these
+	screenPos, err := m.editor.GetCursor().GetScreenPos()
+	if err == nil {
+		// Use the properly calculated screen column that accounts for line numbers
+		cursorCol = screenPos.Col
+	}
+	
+	// Render with cursor at the viewport-relative position
+	return terminalRenderer.RenderToStringWithCursor(renderedLines, cursorRow, cursorCol)
 }
 
 // configureRenderer synchronizes the renderer configuration with the editor's settings.
@@ -556,7 +576,7 @@ func (m *Model) renderHelpBar() string {
 // USAGE: bufferPos := m.screenToBufferSafe(mouseRow, mouseCol)
 func (m *Model) screenToBufferSafe(row, col int) ast.BufferPos {
 	// Check if position is within editor area (exclude status and help bars)
-	editorHeight := m.height - 2
+	editorHeight := m.GetContentHeight()
 	if row >= editorHeight {
 		row = editorHeight - 1
 	}
