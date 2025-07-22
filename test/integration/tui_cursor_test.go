@@ -51,7 +51,8 @@ func TestTUICursor_InitialPositionGhostLineBug(t *testing.T) {
 	// CRITICAL TEST: This test reproduces the exact bug reported
 	// When opening a file, cursor should be at first character, not at end with ghost line
 	
-	// Initialize plugins once for the entire test
+	// Reset registry and initialize plugins once for the entire test
+	plugin.ResetRegistry()
 	err := plugins.InitializePlugins()
 	require.NoError(t, err, "Should initialize plugins successfully")
 	
@@ -162,7 +163,8 @@ func TestTUICursor_InitialPositionGhostLineBug(t *testing.T) {
 }
 
 func TestTUICursor_BasicMovement(t *testing.T) {
-	// Initialize plugins for TUI rendering
+	// Reset registry and initialize plugins for TUI rendering
+	plugin.ResetRegistry()
 	err := plugins.InitializePlugins()
 	require.NoError(t, err, "Should initialize plugins successfully")
 	

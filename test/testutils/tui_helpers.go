@@ -2,7 +2,7 @@ package testutils
 
 import (
 	"io"
-	"github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbletea/v2"
 	"github.com/ofri/mde/internal/tui"
 	"github.com/ofri/mde/pkg/ast"
 )

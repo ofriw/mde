@@ -1,8 +1,7 @@
 package integration
 
 import (
-	"io/ioutil"
-	"os"
+		"os"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -17,7 +16,7 @@ import (
 
 // Helper function to create temporary files for testing
 func createTempFile(t *testing.T, content string) string {
-	tmpFile, err := ioutil.TempFile("", "file_opening_test_*.txt")
+	tmpFile, err := os.CreateTemp("", "file_opening_test_*.txt")
 	require.NoError(t, err)
 	
 	_, err = tmpFile.WriteString(content)
@@ -34,7 +33,8 @@ func TestFileOpening_RealFileLoadWorkflow(t *testing.T) {
 	// CRITICAL TEST: This test reproduces the exact bug by using the real file loading workflow
 	// This bypasses the testutils.LoadContentIntoModel helper which masks the bug
 	
-	// Initialize plugins once for the entire test
+	// Reset registry and initialize plugins once for the entire test
+	plugin.ResetRegistry()
 	err := plugins.InitializePlugins()
 	require.NoError(t, err, "Should initialize plugins successfully")
 	

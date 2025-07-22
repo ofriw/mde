@@ -61,7 +61,13 @@ func testFullPluginLifecycle(t *testing.T) {
 	// 6. Use plugins to render document
 	doc := ast.NewDocument("# Hello World\nThis is a test.")
 	ctx := context.Background()
-	lines, err := defaultRenderer.Render(ctx, doc)
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: true,
+	}
+	lines, err := defaultRenderer.RenderVisible(ctx, renderCtx)
 	require.NoError(t, err, "Should render document without error")
 	assert.Len(t, lines, 2, "Should render correct number of lines")
 	
@@ -106,6 +112,18 @@ func testConfigurationIntegration(t *testing.T) {
 	ctx := context.Background()
 	
 	// Test both regular and preview rendering
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: true,
+	}
+	previewCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: false,
+	}
+	
 	for _, tc := range []struct {
 		name string
 		renderFunc func() ([]plugin.RenderedLine, error)
@@ -113,13 +131,13 @@ func testConfigurationIntegration(t *testing.T) {
 		{
 			name: "Regular render",
 			renderFunc: func() ([]plugin.RenderedLine, error) {
-				return renderer.Render(ctx, doc)
+				return renderer.RenderVisible(ctx, renderCtx)
 			},
 		},
 		{
 			name: "Preview render",
 			renderFunc: func() ([]plugin.RenderedLine, error) {
-				return renderer.RenderPreview(ctx, doc)
+				return renderer.RenderPreviewVisible(ctx, previewCtx)
 			},
 		},
 	} {
@@ -180,7 +198,13 @@ func testDocumentRenderingPipeline(t *testing.T) {
 	
 	// Render document
 	ctx := context.Background()
-	lines, err := renderer.Render(ctx, doc)
+	viewport2 := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx2 := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport2,
+		ShowLineNumbers: true,
+	}
+	lines, err := renderer.RenderVisible(ctx, renderCtx2)
 	require.NoError(t, err, "Should render document")
 	assert.Greater(t, len(lines), 5, "Should render multiple lines")
 	

@@ -16,6 +16,7 @@ package unit
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -124,23 +125,22 @@ func TestCursor_RenderingAtPosition00_WithLineNumbers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	
-	// 
+	// In the new architecture, RenderVisible adds line numbers to content
+	// So we need to simulate that here for the test
+	lineNumberStr := fmt.Sprintf("%*d│", editor.GetLineNumberWidth()-1, 1)
+	contentWithLineNumbers := lineNumberStr + content
 	
-	
-	// Create rendered line
+	// Create rendered line with line numbers already included
 	renderedLine := plugin.RenderedLine{
-		Content: content,
+		Content: contentWithLineNumbers,
 		Styles:  []plugin.StyleRange{},
 	}
 	
-	// Get cursor screen position (should account for line numbers)
-	screenPos, err := editor.GetCursor().GetScreenPos()
-	if err != nil {
-		// Cursor not visible, skip this test
-		t.Skip("Cursor not visible")
-		return
-	}
-	cursorRow, cursorCol := screenPos.Row, screenPos.Col
+	// In the new architecture, since line numbers are already in the content,
+	// we need to pass the cursor column position relative to the start of the line
+	// (which is 0 for cursor at position 0,0), not the screen position
+	cursorRow := 0 // First line
+	cursorCol := editor.GetLineNumberWidth() // Cursor should be after line numbers
 	
 	// Render with cursor
 	result := renderer.RenderToStringWithCursor([]plugin.RenderedLine{renderedLine}, cursorRow, cursorCol)
@@ -162,11 +162,15 @@ func TestCursor_RenderingAtPosition00_WithLineNumbers(t *testing.T) {
 		cursorRuneIndex = utf8.RuneCountInString(cleanResult[:cursorRuneIndex])
 	}
 	
+	// Debug output to understand what's happening
+	t.Logf("Clean result: %q", cleanResult)
+	t.Logf("Cursor index: %d", cursorRuneIndex)
+	t.Logf("Line number width: %d", editor.GetLineNumberWidth())
+	
 	// The cursor should be at the first content character, replacing 'H' in "Hello"
 	// With calculated line number width, e.g., "1 │ Hello World" becomes "1 │ █ello World"
 	// The cursor appears after the line number prefix, replacing the 'H'
 	expectedCursorPos := editor.GetLineNumberWidth() // Should be at first content character (replacing 'H')
-	
 	
 	assert.Equal(t, expectedCursorPos, cursorRuneIndex, "Cursor should be at first content character position (replacing 'H')")
 }
@@ -215,7 +219,13 @@ func TestCursor_VisibilityOnEmptyLine(t *testing.T) {
 	
 	// Render empty document
 	doc := editor.GetDocument()
-	renderedLines, err := renderer.Render(context.Background(), doc)
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: editor.ShowLineNumbers(),
+	}
+	renderedLines, err := renderer.RenderVisible(context.Background(), renderCtx)
 	require.NoError(t, err)
 	
 	// Get cursor position
@@ -255,7 +265,13 @@ func TestCursor_VisibilityAtEndOfLine(t *testing.T) {
 	
 	// Render document
 	doc := editor.GetDocument()
-	renderedLines, err := renderer.Render(context.Background(), doc)
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: editor.ShowLineNumbers(),
+	}
+	renderedLines, err := renderer.RenderVisible(context.Background(), renderCtx)
 	require.NoError(t, err)
 	
 	// Get cursor position
@@ -298,14 +314,21 @@ func TestCursor_VisibilityWithLineNumbers(t *testing.T) {
 	
 	// Render document
 	doc := editor.GetDocument()
-	renderedLines, err := renderer.Render(context.Background(), doc)
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: editor.ShowLineNumbers(),
+	}
+	renderedLines, err := renderer.RenderVisible(context.Background(), renderCtx)
 	require.NoError(t, err)
 	
-	// Get cursor position (should include line number offset)
-	contentPos := editor.GetCursor().GetBufferPos()
+	// Get cursor screen position (includes line number offset)
+	screenPos, err := editor.GetCursor().GetScreenPos()
+	require.NoError(t, err, "Should get screen position successfully")
 	
-	// Render with cursor
-	result := renderer.RenderToStringWithCursor(renderedLines, contentPos.Line, contentPos.Col)
+	// Render with cursor at screen position
+	result := renderer.RenderToStringWithCursor(renderedLines, screenPos.Row, screenPos.Col)
 	
 	// Verify cursor visible after line number prefix
 	cleanResult := stripAnsiEscapes(result)

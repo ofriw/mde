@@ -56,7 +56,13 @@ func testTerminalRenderer(t *testing.T, registry *plugin.Registry) {
 	// Test renderer functionality
 	doc := ast.NewDocument("Hello World\nThis is a test")
 	ctx := context.Background()
-	lines, err := mockRenderer.Render(ctx, doc)
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: true,
+	}
+	lines, err := mockRenderer.RenderVisible(ctx, renderCtx)
 	require.NoError(t, err, "Should render document successfully")
 	assert.Len(t, lines, 2, "Should render correct number of lines")
 	assert.Equal(t, "Hello World", lines[0].Content, "Should render correct content")
@@ -112,7 +118,9 @@ func (m *MockRenderer) Name() string {
 	return m.name
 }
 
-func (m *MockRenderer) Render(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
+
+func (m *MockRenderer) RenderVisible(ctx context.Context, renderCtx *plugin.RenderContext) ([]plugin.RenderedLine, error) {
+	doc := renderCtx.Document
 	lines := make([]plugin.RenderedLine, 0, doc.LineCount())
 	
 	for i := 0; i < doc.LineCount(); i++ {
@@ -129,8 +137,8 @@ func (m *MockRenderer) Render(ctx context.Context, doc *ast.Document) ([]plugin.
 	return lines, nil
 }
 
-func (m *MockRenderer) RenderPreview(ctx context.Context, doc *ast.Document) ([]plugin.RenderedLine, error) {
-	return m.Render(ctx, doc)
+func (m *MockRenderer) RenderPreviewVisible(ctx context.Context, renderCtx *plugin.RenderContext) ([]plugin.RenderedLine, error) {
+	return m.RenderVisible(ctx, renderCtx)
 }
 
 func (m *MockRenderer) RenderLine(ctx context.Context, line string, tokens []ast.Token) (plugin.RenderedLine, error) {

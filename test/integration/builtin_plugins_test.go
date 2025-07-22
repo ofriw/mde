@@ -48,14 +48,20 @@ func testBuiltinTerminalRenderer(t *testing.T) {
 	
 	// Test rendering
 	ctx := context.Background()
-	lines, err := renderer.Render(ctx, doc)
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: true,
+	}
+	lines, err := renderer.RenderVisible(ctx, renderCtx)
 	require.NoError(t, err, "Should render successfully")
 	assert.Len(t, lines, 3, "Should render correct number of lines")
 	
-	// Check content
-	assert.Equal(t, "func main() {", lines[0].Content, "Should render first line correctly")
-	assert.Equal(t, "  println(\"Hello, World!\")", lines[1].Content, "Should expand tabs to spaces")
-	assert.Equal(t, "}", lines[2].Content, "Should render last line correctly")
+	// Check content (now includes line numbers since we use RenderVisible)
+	assert.Equal(t, "    1│func main() {", lines[0].Content, "Should render first line correctly")
+	assert.Equal(t, "    2│  println(\"Hello, World!\")", lines[1].Content, "Should expand tabs to spaces")
+	assert.Equal(t, "    3│}", lines[2].Content, "Should render last line correctly")
 	
 	// Test line rendering with tokens (need to create tokens properly)
 	// Since Token fields are private, we'll test without tokens for now
@@ -88,7 +94,13 @@ This is a **bold** text and *italic* text.
 	
 	// Render document
 	ctx := context.Background()
-	lines, err := renderer.Render(ctx, doc)
+	viewport2 := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx2 := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport2,
+		ShowLineNumbers: true,
+	}
+	lines, err := renderer.RenderVisible(ctx, renderCtx2)
 	require.NoError(t, err, "Should render document successfully")
 	
 	// Verify we got the expected number of lines
@@ -98,10 +110,16 @@ This is a **bold** text and *italic* text.
 	output := renderer.RenderToString(lines)
 	assert.Contains(t, output, "# Hello World", "Should contain heading")
 	assert.Contains(t, output, "This is a", "Should contain regular text")
-	assert.Contains(t, output, "1 │", "Should contain line numbers")
+	assert.Contains(t, output, "1│", "Should contain line numbers")
 	
 	// Test preview rendering
-	previewLines, err := renderer.RenderPreview(ctx, doc)
+	viewport := ast.NewViewport(0, 0, 80, 25, 6, 4)
+	renderCtx := &plugin.RenderContext{
+		Document: doc,
+		Viewport: viewport,
+		ShowLineNumbers: false, // Preview mode typically doesn't show line numbers
+	}
+	previewLines, err := renderer.RenderPreviewVisible(ctx, renderCtx)
 	require.NoError(t, err, "Should render preview successfully")
 	assert.Equal(t, len(lines), len(previewLines), "Preview should have same number of lines")
 }
@@ -124,7 +142,8 @@ func testRealPluginInitialization(t *testing.T) {
 	require.NoError(t, err, "Should get default renderer")
 	assert.Equal(t, "terminal", defaultRenderer.Name(), "Should have terminal as default renderer")
 	
-	// Test the full initialization process
+	// Reset registry and test the full initialization process
+	plugin.ResetRegistry()
 	err = plugins.InitializePlugins()
 	// This might fail due to missing dependencies, but should handle gracefully
 	if err != nil {
